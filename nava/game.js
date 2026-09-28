@@ -157,7 +157,7 @@ function runClock(dt) {
   // schedule a little ahead for sample-accurate timing, but never past the note the player owes us
   const horizon = Math.min(target + 0.15 * bps, limit);
   while (accAt() < horizon - 1e-9) {
-    Sound.playAt(song.inst, accList[accPtr].notes, ACC_VEL, (accAt() - clockT) / bps);
+    Sound.playAt(inst, accList[accPtr].notes, ACC_VEL, (accAt() - clockT) / bps);
     accNext();
   }
   clockT = target;
@@ -181,7 +181,8 @@ function genTiles(untilRow) {
     let col;
     do { col = (Math.random() * COLS) | 0; } while (col === lastCol);
     lastCol = col;
-    tiles.push({ col, b: genRow, h: tileRows(e.dur), notes: e.notes, ev: e, tapped: false, tt: 0, lap: genLap });
+    const q = e.notes[0] % 1 ? quarterName(e.notes[0]) : null;
+    tiles.push({ col, b: genRow, h: tileRows(e.dur), notes: e.notes, ev: e, tapped: false, tt: 0, lap: genLap, q });
     genRow += rows(e.dur);
   }
 }
@@ -200,20 +201,116 @@ const ui = {
   btnRetry: $('btnRetry'), btnSongs: $('btnSongs'),
   loading: $('loading'), loadBar: $('loadBar'),
   editor: $('editor'), edTitle: $('edTitle'), edNotes: $('edNotes'), edAccomp: $('edAccomp'), edSpeed: $('edSpeed'), edErr: $('edErr'),
+  starTotal: $('starTotal'), daily: $('daily'), instPick: $('instPick'), lesson: $('lesson'), toast: $('toast'), overNews: $('overNews'),
   edFile: $('edFile'), edQuarter: $('edQuarter'), edImport: $('edImport'),
   edInst: document.querySelectorAll('[data-inst]'), btnPreview: $('btnPreview'), btnSave: $('btnSave'), btnCancel: $('btnCancel'),
 };
 const show = (el, on) => { el.hidden = !on; };
 let tab = store.get('nava.tab', 'classic');
 
+// ---------------------------------------------------------------- progression
+// Stars from the built-in songs (plus one per daily challenge) unlock harder songs and new instruments.
+// Your own songs are never locked.
+const INSTS = {
+  piano: { name: 'پیانو', unlock: 0 },
+  santur: { name: 'سنتور', unlock: 0 },
+  tar: { name: 'تار', unlock: 5 },
+  kamancheh: { name: 'کمانچه', unlock: 12 },
+};
+let instPick = store.get('nava.inst', 'auto'); // 'auto' = each song's own instrument
+let inst = 'piano';                              // instrument of the song being played
+let daily = store.get('nava.daily', {});
+const totalStars = () => SONGS.reduce((a, s) => a + ((best[s.id] || {}).stars || 0), 0) + (daily.bonus || 0);
+const songOpen = s => !s.unlock || totalStars() >= s.unlock;
+const instOpen = i => totalStars() >= INSTS[i].unlock;
+let toastT = 0;
+function toast(text) {
+  ui.toast.textContent = text; show(ui.toast, true);
+  clearTimeout(toastT); toastT = setTimeout(() => show(ui.toast, false), 2200);
+}
+
+// Daily challenge: one song and one goal per day, the same for the whole day.
+const dayKey = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+const GOALS = [
+  { t: 'combo', n: 15 }, { t: 'combo', n: 30 }, { t: 'perfect', n: 25 }, { t: 'acc', n: 80 }, { t: 'stars', n: 3 },
+];
+function goalText(g) {
+  return g.t === 'combo' ? `به کمبوی ${faNum(g.n)} برس`
+    : g.t === 'perfect' ? `${faNum(g.n)} ضربه‌ی «عالی» بزن`
+    : g.t === 'acc' ? `دقت ریتم ${faNum(g.n)}٪ یا بیشتر (دست‌کم ۲۰ کاشی)`
+    : 'سه ستاره بگیر';
+}
+function dailyToday() {
+  const key = dayKey(new Date());
+  if (daily.day !== key || !SONGS.some(s => s.id === daily.song)) {
+    let h = 7;
+    for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const pool = SONGS.filter(songOpen);
+    daily = { ...daily, day: key, song: pool[h % pool.length].id, goal: GOALS[(h >>> 8) % GOALS.length], done: false };
+    store.set('nava.daily', daily);
+  }
+  return daily;
+}
+const accuracy = () => hits ? Math.round((100 * (judged.perfect + judged.great * 0.6)) / hits) : 0;
+function goalMet(g) {
+  return g.t === 'combo' ? maxStreak >= g.n : g.t === 'perfect' ? judged.perfect >= g.n
+    : g.t === 'acc' ? hits >= 20 && accuracy() >= g.n : starsFor() >= g.n;
+}
+function renderTop() {
+  ui.starTotal.textContent = '★ ' + faNum(totalStars());
+  const d = dailyToday(), s = SONGS.find(x => x.id === d.song);
+  ui.daily.className = 'daily' + (d.done ? ' done' : '');
+  ui.daily.innerHTML = `<span class="k">🎯 چالش امروز</span><b>${esc(s.title)}</b><small>${goalText(d.goal)}${d.done ? '' : ' · جایزه: ۱★'}</small>
+    <span class="s">${d.done ? '✓' : d.streak && d.last === dayKey(new Date(Date.now() - 864e5)) ? `🔥<br>${faNum(d.streak)} روز` : ''}</span>`;
+  ui.instPick.innerHTML = [['auto', 'ساز آهنگ']].concat(Object.entries(INSTS).map(([k, v]) => [k, v.name])).map(([k, name]) => {
+    const locked = k !== 'auto' && !instOpen(k);
+    return `<button data-pick="${k}" class="${instPick === k ? 'on' : ''}${locked ? ' locked' : ''}">${locked ? `🔒 ${name} ${faNum(INSTS[k].unlock)}★` : name}</button>`;
+  }).join('');
+}
+ui.daily.addEventListener('click', () => startSong(SONGS.find(x => x.id === dailyToday().song)));
+ui.instPick.addEventListener('click', e => {
+  const b = e.target.closest('[data-pick]');
+  if (!b) return;
+  const k = b.dataset.pick;
+  if (k !== 'auto' && !instOpen(k)) { toast(`${INSTS[k].name} با ${faNum(INSTS[k].unlock)} ستاره باز می‌شود؛ ${faNum(INSTS[k].unlock - totalStars())} ستاره‌ی دیگر لازم است.`); return; }
+  instPick = k; store.set('nava.inst', k);
+  if (k !== 'auto') { Sound.init(); Sound.chime(k, [62, 66, 69], 0.12); }
+  renderTop();
+});
+
+// Persian note names for the dastgah lesson and quarter-tone tiles
+const FA_NOTE = { C: 'دو', D: 'ر', E: 'می', F: 'فا', G: 'سل', A: 'لا', B: 'سی' };
+const FA_ACC = { '#': ' دیز', b: ' بمل', k: ' کُرن', s: ' سُری', '': '' };
+const PC_LETTER = { 0: 'C', 2: 'D', 4: 'E', 5: 'F', 7: 'G', 9: 'A', 11: 'B' };
+function quarterName(m) {
+  const up = Math.round(m + 0.5);
+  return PC_LETTER[up % 12] ? FA_NOTE[PC_LETTER[up % 12]] + ' کُرن' : FA_NOTE[PC_LETTER[(up - 1) % 12]] + ' سُری';
+}
+function showLesson(s) {
+  const d = s.dastgah;
+  if (!d) { show(ui.lesson, false); return; }
+  const chips = d.scale.split(/\s+/).map((tok, i) => {
+    const [, L, a] = /^([A-G])(#|b|k|s)?/.exec(tok);
+    const q = a === 'k' || a === 's';
+    return `<span class="${q ? 'q' : ''}${i === 0 ? ' t' : ''}">${FA_NOTE[L]}${FA_ACC[a || '']}</span>`;
+  }).join('');
+  ui.lesson.innerHTML = `<h3>دستگاه ${esc(d.name)} <small>· پایه روی ${esc(d.tonic)}</small></h3>
+    <div class="scale">${chips}</div><p>${esc(d.about)}</p>
+    <div class="legend">نُت‌های فیروزه‌ای ربع‌پرده‌اند؛ روی کاشی‌شان هم نامشان نوشته شده.</div>`;
+  show(ui.lesson, true);
+}
+
 const ICONS = {
   piano: '<svg viewBox="0 0 32 32"><rect x="3" y="7" width="26" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 7v18M16 7v18M22.5 7v18" stroke="currentColor" stroke-width="1.6"/><rect x="7.5" y="7" width="4" height="10" rx="1" fill="currentColor"/><rect x="14" y="7" width="4" height="10" rx="1" fill="currentColor"/><rect x="20.5" y="7" width="4" height="10" rx="1" fill="currentColor"/></svg>',
+  tar: '<svg viewBox="0 0 32 32"><path d="M16 3v13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M14 3.5h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M16 15c-4.5 0-6.5 2.4-6.5 5.8 0 4 2.9 7.2 6.5 7.2s6.5-3.2 6.5-7.2c0-3.4-2-5.8-6.5-5.8z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 17.5c-2 0-3 1.2-3 3M16 17.5c2 0 3 1.2 3 3" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  kamancheh: '<svg viewBox="0 0 32 32"><path d="M16 2.5v12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="16" cy="19.5" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 25.5v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 11l22 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
   santur: '<svg viewBox="0 0 32 32"><path d="M4 23 9 9h14l5 14z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 13h16M7 16.5h18M6 20h20" stroke="currentColor" stroke-width="1.2"/><path d="M11 4l4 7M21 4l-4 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
 };
 const starsHtml = n => [0, 1, 2].map(i => `<span class="${i < n ? 'on' : ''}">★</span>`).join('');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function renderList() {
+  renderTop();
   ui.tabs.forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   show(ui.addBtn, tab === 'mine');
   const list = allSongs().filter(s => s.cat === tab);
@@ -224,10 +321,11 @@ function renderList() {
   ui.list.innerHTML = list.map(s => {
     const b = best[s.id] || { score: 0, stars: 0 };
     const lvl = s.level ? '<i class="lvl">' + '●'.repeat(s.level) + '<span class="off">' + '●'.repeat(3 - s.level) + '</span></i>' : '';
-    return `<button class="song ${s.inst}" data-id="${esc(s.id)}">
+    const locked = !songOpen(s);
+    return `<button class="song ${s.inst}${locked ? ' locked' : ''}" data-id="${esc(s.id)}">
       <span class="ic">${ICONS[s.inst] || ICONS.piano}</span>
       <span class="meta"><b>${esc(s.title)}</b><small>${esc(s.by || (s.inst === 'santur' ? 'سنتور' : 'پیانو'))} ${lvl}</small></span>
-      <span class="res"><span class="stars">${starsHtml(b.stars)}</span><small>${b.score ? faNum(b.score) : ''}</small>
+      <span class="res">${locked ? `<span class="lock">🔒 ${faNum(s.unlock)}★</span>` : `<span class="stars">${starsHtml(b.stars)}</span><small>${b.score ? faNum(b.score) : ''}</small>`}
         ${s.cat === 'mine' ? `<span class="acts"><span class="edit" data-edit="${esc(s.id)}" aria-label="ویرایش">✎</span><span class="del" data-del="${esc(s.id)}" aria-label="حذف">×</span></span>` : ''}</span>
     </button>`;
   }).join('');
@@ -245,7 +343,14 @@ ui.list.addEventListener('click', e => {
     return;
   }
   const card = e.target.closest('.song');
-  if (card) startSong(allSongs().find(s => s.id === card.dataset.id));
+  if (!card) return;
+  const s = allSongs().find(x => x.id === card.dataset.id);
+  if (!songOpen(s)) {
+    card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+    toast(`با ${faNum(s.unlock)} ستاره باز می‌شود؛ ${faNum(s.unlock - totalStars())} ستاره‌ی دیگر از آهنگ‌های باز بگیر.`);
+    return;
+  }
+  startSong(s);
 });
 
 function syncSound() { ui.btnSound.classList.toggle('muted', !Sound.enabled); }
@@ -269,14 +374,15 @@ async function startSong(s) {
   rowBeat = s.rowBeat || 1;
   const acc = s.accomp ? parseSong(s.accomp).events : null;
   buildTiming(acc);
-  theme = s.inst === 'santur' ? THEMES.iranian : THEMES.classic;
+  inst = instPick !== 'auto' && instOpen(instPick) ? instPick : s.inst;
+  theme = inst === 'piano' ? THEMES.classic : THEMES.iranian;
   buildBg();
   show(ui.menu, false); show(ui.over, false); show(ui.pause, false);
   mode = 'loading';
   show(ui.loading, true);
   ui.loadBar.style.transform = 'scaleX(0)';
   const midis = events.concat(acc || []).flatMap(e => e.notes || []);
-  await Sound.preload(s.inst, midis, p => { ui.loadBar.style.transform = `scaleX(${p})`; });
+  await Sound.preload(inst, midis, p => { ui.loadBar.style.transform = `scaleX(${p})`; });
   show(ui.loading, false);
   tiles = []; nextIdx = 0; genRow = 0; genEvent = 0; genLap = 1; lastCol = -1;
   pos = 0; score = 0; hits = 0; hold = null; floats = [];
@@ -287,10 +393,12 @@ async function startSong(s) {
   hudScore = -1; hudProg = -1; hudStreak = -1;
   mode = 'ready';
   show(ui.hud, true);
+  showLesson(s);
 }
 
 function toMenu() {
   mode = 'menu';
+  show(ui.lesson, false);
   hold = null;
   Sound.cancelPending();
   show(ui.hud, false); show(ui.over, false); show(ui.pause, false); show(ui.loading, false);
@@ -324,6 +432,7 @@ function triggerFail(kind, tile, x, y) {
 function finishRun() {
   mode = 'over';
   const stars = starsFor();
+  const starsBefore = totalStars();
   const prev = best[song.id] || { score: 0, stars: 0 };
   const isBest = score > prev.score;
   best[song.id] = { score: Math.max(prev.score, score), stars: Math.max(prev.stars, stars) };
@@ -332,7 +441,20 @@ function finishRun() {
   ui.overScore.textContent = faNum(score);
   ui.overStars.innerHTML = starsHtml(stars) + (lap > 1 ? `<em>دور ${faNum(lap)}</em>` : '');
   ui.overBest.textContent = faNum(best[song.id].score);
-  const acc = hits ? Math.round((100 * (judged.perfect + judged.great * 0.6)) / hits) : 0;
+  const acc = accuracy();
+  const news = [];
+  const d = dailyToday();
+  if (song.id === d.song && !d.done && goalMet(d.goal)) {
+    const today = dayKey(new Date()), yest = dayKey(new Date(Date.now() - 864e5));
+    daily = { ...d, done: true, streak: d.last === yest ? (d.streak || 0) + 1 : 1, last: today, bonus: (d.bonus || 0) + 1 };
+    store.set('nava.daily', daily);
+    news.push(`🎯 چالش امروز انجام شد! +۱★${daily.streak > 1 ? ` · ${faNum(daily.streak)} روز پشت‌سرهم 🔥` : ''}`);
+  }
+  const after = totalStars();
+  for (const s of SONGS) if (s.unlock > starsBefore && s.unlock <= after) news.push(`🔓 آهنگ تازه باز شد: ${esc(s.title)}`);
+  for (const k in INSTS) if (INSTS[k].unlock > starsBefore && INSTS[k].unlock <= after) news.push(`🔓 ساز تازه باز شد: ${INSTS[k].name}`);
+  ui.overNews.innerHTML = news.join('<br>');
+  show(ui.overNews, news.length > 0);
   ui.overStats.innerHTML = `عالی <b>${faNum(judged.perfect)}</b> · خوب <b>${faNum(judged.great)}</b> · بیشترین کمبو <b>${faNum(maxStreak)}</b><br>دقت ریتم <b>${faNum(acc)}٪</b>`;
   show(ui.newBest, isBest && score > 0);
   show(ui.hud, false); show(ui.over, true);
@@ -388,13 +510,14 @@ function hit(tl, x, y, id) {
   else {
     const before = mult();
     streak++; maxStreak = Math.max(maxStreak, streak);
-    if (mult() > before) { flash = 1; Sound.chime(song.inst, [tl.notes[0] + 12, tl.notes[0] + 19], 0.07); }
+    if (mult() > before) { flash = 1; Sound.chime(inst, [tl.notes[0] + 12, tl.notes[0] + 19], 0.07); }
   }
   score += POINTS[j] * mult();
+  if (tl.q) floats.push({ x, y: y - B.rowH * 0.8, t: 0, text: tl.q, j: 'q' });
   if (j !== 'ok' && mode !== 'ready') floats.push({ x, y: y - B.rowH * 0.35, t: 0, text: JUDGE_TEXT[j], j });
-  if (tl.lap > lap) { lap = tl.lap; speedMul = Math.pow(1.14, lap - 1); Sound.chime(song.inst, [tl.notes[0] + 12]); }
+  if (tl.lap > lap) { lap = tl.lap; speedMul = Math.pow(1.14, lap - 1); Sound.chime(inst, [tl.notes[0] + 12]); }
   if (accList.length) syncClock(tileTime(tl));
-  const voices = Sound.play(song.inst, tl.notes, 0.95, accList.length ? 0.8 : 0.62);
+  const voices = Sound.play(inst, tl.notes, 0.95, accList.length ? 0.8 : 0.62);
   if (isLong(tl)) {
     // rows between the tile's bottom and the touch point: the fill starts there, under the finger
     const off = clamp((tileBottom(tl) - y) / B.rowH, 0, tl.h);
@@ -402,7 +525,7 @@ function hit(tl, x, y, id) {
     tl.fill = off; tl.holding = true;
   }
   ripples.push({ x, y, t: 0, col: tl.col });
-  if (mode === 'ready') mode = 'play';
+  if (mode === 'ready') { mode = 'play'; show(ui.lesson, false); }
   nextIdx++;
   runClock(0);
 }
@@ -614,6 +737,13 @@ function drawTile(x, y, w, h, tl, alpha) {
     for (let i = 0; i < 16; i++) { const a = (i / 16) * TAU - Math.PI / 2, r = i % 2 ? s * 0.55 : s; i ? ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
     ctx.closePath(); ctx.stroke();
   }
+  if (tl && tl.q) {
+    // quarter-tone tile: its Persian name, so players learn where koron and sori fall
+    ctx.globalAlpha = alpha * 0.9; ctx.fillStyle = '#7fe8e1';
+    ctx.font = `700 ${Math.round(Math.min(w * 0.17, 14))}px Vazirmatn, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(tl.q, x + w / 2, y + Math.min(h, B.rowH) * 0.28);
+  }
   if (tl && tl.h > 1.01) {
     ctx.globalAlpha = alpha * 0.35; ctx.strokeStyle = theme.edge; ctx.lineWidth = 2; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(x + w / 2, y + B.rowH * 0.3); ctx.lineTo(x + w / 2, y + h - B.rowH * 0.5 - 12); ctx.stroke();
@@ -725,7 +855,7 @@ function render() {
   ctx.font = `900 ${Math.round(Math.min(B.colW * 0.3, 30))}px Vazirmatn, sans-serif`;
   for (const f of floats) {
     ctx.globalAlpha = 1 - f.t / 0.9;
-    ctx.fillStyle = f.j === 'perfect' ? '#ffe7a8' : f.j === 'great' ? '#bff5f1' : theme.edge;
+    ctx.fillStyle = f.j === 'perfect' ? '#ffe7a8' : f.j === 'great' || f.j === 'q' ? '#bff5f1' : theme.edge;
     const sc = f.j ? 0.75 + Math.min(1, f.t * 8) * 0.25 : 1;
     ctx.save(); ctx.translate(f.x, f.y - f.t * 50); ctx.scale(sc, sc); ctx.fillText(f.text, 0, 0); ctx.restore();
   }

@@ -1,5 +1,5 @@
-// Piano and santur voices synthesised note-by-note into cached AudioBuffers (additive synthesis),
-// so quarter tones (koron / sori) are tuned exactly. No audio files are used.
+// Santur, tar and kamancheh are synthesised note-by-note into cached AudioBuffers (additive, plucked-string
+// and bowed models), so quarter tones (koron / sori) are tuned exactly. The piano uses recorded samples.
 const Sound = (() => {
   'use strict';
 
@@ -14,6 +14,8 @@ const Sound = (() => {
   const VOICES = {
     // partials, amplitude rolloff, per-partial decay, inharmonicity, string detune (cents), length, hammer
     piano: { partials: 9, roll: 1.35, d0: 0.75, dn: 0.42, B: 0.00035, strings: [-0.9, 0.9], len: 2.8, attack: 0.004, hammer: 0.06, hammerLP: 0.08, bright: 1 },
+    tar: { model: 'pluck', strings: [-2.5, 2.5], len: 2.6, t60: 3.2, bright: 0.55, pick: 0.13 },
+    kamancheh: { model: 'bow', partials: 16, len: 2.2, attack: 0.09 },
     santur: { partials: 12, roll: 0.85, d0: 1.25, dn: 0.5, B: 0.00012, strings: [-5, -1.2, 3.5], len: 2.3, attack: 0.0015, hammer: 0.16, hammerLP: 0.55, bright: 1.35 },
   };
 
@@ -50,8 +52,82 @@ const Sound = (() => {
   function resume() { if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {}); }
   function suspend() { if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {}); }
 
+  // Tar: plucked double course (Karplus-Strong). An allpass sets the fractional loop length, so quarter
+  // tones stay exactly in tune.
+  function renderPluck(v, f0, n, sr) {
+    const out = new Float32Array(n);
+    for (const cents of v.strings) {
+      const f = f0 * Math.pow(2, cents / 1200);
+      let L = sr / f - 0.5, N = Math.floor(L), fr = L - N;
+      if (fr < 0.1) { N--; fr += 1; }
+      const C = (1 - fr) / (1 + fr);
+      const g = Math.pow(10, -3 / (v.t60 * Math.pow(f / 220, 0.35) * f));
+      const dl = new Float32Array(N);
+      // pluck: bright noise burst with a pick-position notch
+      let lp = 0;
+      for (let i = 0; i < N; i++) { lp += (Math.random() * 2 - 1 - lp) * v.bright; dl[i] = lp; }
+      const pk = Math.max(1, Math.round(N * v.pick));
+      for (let i = N - 1; i >= pk; i--) dl[i] -= dl[i - pk] * 0.9;
+      let idx = 0, prev = 0, x1 = 0, y1 = 0;
+      for (let i = 0; i < n; i++) {
+        const sm = dl[idx];
+        const avg = 0.5 * (sm + prev); prev = sm;
+        const ap = C * avg + x1 - C * y1; x1 = avg; y1 = ap;
+        dl[idx] = ap * g;
+        out[i] += sm;
+        if (++idx >= N) idx = 0;
+      }
+    }
+    return out;
+  }
+
+  // Kamancheh: bowed string. Rich partials shaped by a body resonance, a soft bow attack, vibrato that
+  // blooms after the attack, and a little bow noise.
+  function renderBow(v, f0, n, sr) {
+    const out = new Float32Array(n);
+    const body = fk => 0.35 + Math.exp(-Math.pow(Math.log2(fk / 1100), 2) * 1.6) + 0.5 * Math.exp(-Math.pow(Math.log2(fk / 2900), 2) * 3);
+    // one period of the spectrum in a wavetable, then read with a vibrato-modulated phase: cheap enough for phones
+    const TN = 2048, tab = new Float32Array(TN + 1);
+    for (let k = 1; k <= v.partials && f0 * k < sr * 0.42; k++) {
+      const amp = body(f0 * k) / Math.pow(k, 0.95), ph0 = Math.random() * 6.283;
+      for (let i = 0; i <= TN; i++) tab[i] += Math.sin(ph0 + 6.283 * k * i / TN) * amp;
+    }
+    for (const det of [-3, 3]) {
+      const fs = f0 * Math.pow(2, det / 1200), vr = 5.3 + det * 0.05;
+      let ph = Math.random();
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const depth = 0.0065 * Math.min(1, Math.max(0, (t - 0.18) / 0.35));
+        ph += fs * (1 + depth * Math.sin(6.283 * vr * t)) / sr;
+        ph -= Math.floor(ph);
+        const x = ph * TN, j = x | 0;
+        out[i] += (tab[j] + (tab[j + 1] - tab[j]) * (x - j)) * 0.5;
+      }
+    }
+    let lp = 0;
+    for (let i = 0; i < n; i++) { lp += (Math.random() * 2 - 1 - lp) * 0.3; out[i] += lp * 0.05; }
+    const an = Math.floor(sr * v.attack);
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      const env = i < an ? Math.pow(i / an, 1.5) : 1 - 0.25 * Math.min(1, (t - v.attack) / 1.5);
+      out[i] *= env;
+    }
+    return out;
+  }
+
   function render(inst, midi) {
     const v = VOICES[inst];
+    if (v.model) {
+      const sr = ctx.sampleRate, n = Math.floor(sr * v.len);
+      const out = (v.model === 'pluck' ? renderPluck : renderBow)(v, mtof(midi), n, sr);
+      const rn = Math.floor(sr * 0.12);
+      for (let i = 0; i < rn; i++) out[n - 1 - i] *= i / rn;
+      let peak = 0;
+      for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[i]));
+      const buf = ctx.createBuffer(1, n, sr), d = buf.getChannelData(0), g = 0.55 / (peak || 1);
+      for (let i = 0; i < n; i++) d[i] = out[i] * g;
+      return buf;
+    }
     const sr = ctx.sampleRate;
     const f0 = mtof(midi);
     const n = Math.floor(sr * v.len);
