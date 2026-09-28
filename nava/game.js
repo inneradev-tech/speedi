@@ -120,6 +120,37 @@ let mine = store.get('nava.mine', []);
 
 const allSongs = () => SONGS.concat(mine.map(s => ({ ...s, cat: 'mine' })));
 const rowsFor = dur => clamp(dur / unit, 1, 2);
+const restRows = dur => Math.min(2, dur / unit);
+const ACC_VEL = 0.42;
+
+// Give each melody note its slice of the accompaniment: every accompaniment note belongs to the
+// melody note sounding when it starts, with an offset in beats. On tap those notes are scheduled
+// relative to the tap, stretched to the time the player actually has until the next tile.
+function buildTiming(acc) {
+  let t0 = 0;
+  for (const e of events) { e.t0 = t0; t0 += e.dur; }
+  const total = t0;
+  const notes = events.filter(e => !e.rest);
+  notes.forEach((e, i) => {
+    const next = notes[i + 1];
+    e.beats = (next ? next.t0 : total + notes[0].t0) - e.t0;
+    let rows = rowsFor(e.dur);
+    for (let j = events.indexOf(e) + 1; j < events.length && events[j].rest; j++) rows += restRows(events[j].dur);
+    e.rows = rows;
+    e.acc = [];
+  });
+  if (!acc) return;
+  let at = 0, k = 0;
+  for (const a of acc) {
+    if (!a.rest) {
+      while (k + 1 < notes.length && notes[k + 1].t0 <= at + 1e-9) k++;
+      const owner = notes[k];
+      owner.acc.push({ off: Math.max(0, at - owner.t0), notes: a.notes });
+    }
+    at += a.dur;
+  }
+}
+const speedNow = () => baseSpeed * speedMul * (1 + Math.min(0.6, score * 0.0035));
 
 function genTiles(untilRow) {
   while (genRow < untilRow) {
@@ -129,12 +160,12 @@ function genTiles(untilRow) {
       genRow += 0.6;
     }
     const e = events[genEvent++];
-    if (e.rest) { genRow += Math.min(2, e.dur / unit); continue; }
+    if (e.rest) { genRow += restRows(e.dur); continue; }
     let col;
     do { col = (Math.random() * COLS) | 0; } while (col === lastCol);
     lastCol = col;
     const h = rowsFor(e.dur);
-    tiles.push({ col, b: genRow, h, notes: e.notes, tapped: false, tt: 0, lap: genLap });
+    tiles.push({ col, b: genRow, h, notes: e.notes, ev: e, tapped: false, tt: 0, lap: genLap });
     genRow += h;
   }
 }
@@ -216,14 +247,16 @@ async function startSong(s) {
   const parsed = parseSong(s.notes);
   if (parsed.error !== undefined) return;
   events = parsed.events;
-  unit = Math.min(...events.map(e => e.dur));
+  unit = Math.min(...events.filter(e => !e.rest).map(e => e.dur));
+  const acc = s.accomp ? parseSong(s.accomp).events : null;
+  buildTiming(acc);
   theme = s.inst === 'santur' ? THEMES.iranian : THEMES.classic;
   buildBg();
   show(ui.menu, false); show(ui.over, false); show(ui.pause, false);
   mode = 'loading';
   show(ui.loading, true);
   ui.loadBar.style.transform = 'scaleX(0)';
-  const midis = events.flatMap(e => e.notes || []);
+  const midis = events.concat(acc || []).flatMap(e => e.notes || []);
   await Sound.preload(s.inst, midis, p => { ui.loadBar.style.transform = `scaleX(${p})`; });
   show(ui.loading, false);
   tiles = []; nextIdx = 0; genRow = 0; genEvent = 0; genLap = 1; lastCol = -1;
@@ -238,6 +271,7 @@ async function startSong(s) {
 
 function toMenu() {
   mode = 'menu';
+  Sound.cancelPending();
   show(ui.hud, false); show(ui.over, false); show(ui.pause, false); show(ui.loading, false);
   show(ui.menu, true);
   theme = THEMES[tab === 'iranian' ? 'iranian' : 'classic'];
@@ -245,7 +279,7 @@ function toMenu() {
   renderList();
 }
 
-function pauseGame() { if (mode !== 'play') return; mode = 'pause'; show(ui.pause, true); }
+function pauseGame() { if (mode !== 'play') return; mode = 'pause'; Sound.cancelPending(); show(ui.pause, true); }
 function resumeGame() {
   if (mode !== 'pause') return;
   show(ui.pause, false);
@@ -309,7 +343,12 @@ function hit(tl, x, y) {
   tl.tapped = true; tl.tt = 0;
   score++;
   if (tl.lap > lap) { lap = tl.lap; speedMul = Math.pow(1.14, lap - 1); Sound.chime(song.inst, [tl.notes[0] + 12]); }
-  Sound.play(song.inst, tl.notes, 0.95);
+  Sound.cancelPending();
+  Sound.play(song.inst, tl.notes, 0.95, tl.ev.acc.length ? 0.8 : 0.62);
+  if (tl.ev.acc.length) {
+    const secPerBeat = (tl.ev.rows / speedNow()) / tl.ev.beats;
+    for (const a of tl.ev.acc) Sound.playAt(song.inst, a.notes, ACC_VEL, a.off * secPerBeat);
+  }
   ripples.push({ x, y, t: 0, col: tl.col });
   if (mode === 'ready') mode = 'play';
   nextIdx++;
@@ -389,8 +428,7 @@ function update(dt) {
   for (const tl of tiles) if (tl.tapped) tl.tt += dt;
 
   if (mode === 'play') {
-    const sp = baseSpeed * speedMul * (1 + Math.min(0.6, score * 0.0035));
-    pos += sp * dt;
+    pos += speedNow() * dt;
     genTiles(pos + 10);
     const tl = nextTile();
     // missed: the tile slid half-way off the bottom untapped

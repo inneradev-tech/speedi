@@ -123,20 +123,43 @@ const Sound = (() => {
     });
   }
 
-  function play(inst, midis, vel = 1) {
+  function play(inst, midis, vel = 1, restVel = 0.62) {
     if (!ctx) return;
     const t = ctx.currentTime;
     midis.forEach((m, i) => {
       const src = ctx.createBufferSource();
       src.buffer = get(inst, m);
       const g = ctx.createGain();
-      g.gain.value = vel * (i === 0 ? 1 : 0.62);
+      g.gain.value = vel * (i === 0 ? 1 : restVel);
       src.connect(g); g.connect(dry); g.connect(verbIn);
       src.start(t + i * 0.004);
     });
   }
 
+  // Accompaniment notes scheduled ahead of time; a new tap cancels whatever has not started yet.
+  let pending = [];
+  function playAt(inst, midis, vel, delay) {
+    if (!ctx) return;
+    const t = ctx.currentTime + Math.max(0, delay);
+    for (const m of midis) {
+      const src = ctx.createBufferSource();
+      src.buffer = get(inst, m);
+      const g = ctx.createGain();
+      g.gain.value = vel;
+      src.connect(g); g.connect(dry); g.connect(verbIn);
+      src.start(t);
+      pending.push({ src, t });
+    }
+  }
+  function cancelPending() {
+    if (!ctx) return;
+    const now = ctx.currentTime + 0.005;
+    for (const p of pending) if (p.t > now) { try { p.src.stop(); } catch (e) {} }
+    pending = [];
+  }
+
   function fail() {
+    cancelPending();
     if (!ctx) return;
     const t = ctx.currentTime;
     [40, 41, 46].forEach(m => {
@@ -164,7 +187,7 @@ const Sound = (() => {
   }
 
   return {
-    init, resume, suspend, preload, play, fail, chime, toggle,
+    init, resume, suspend, preload, play, playAt, cancelPending, fail, chime, toggle,
     get ready() { return !!ctx; },
     get enabled() { return enabled; },
   };
