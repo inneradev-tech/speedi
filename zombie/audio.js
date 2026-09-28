@@ -306,6 +306,33 @@ const Sound = (() => {
       o.start(s); o.stop(s + 0.55);
     });
   }
+  // Bite: a wet crunch — noisy snap, low squelch sweeping down, and a couple of bone-crack clicks.
+  function bite() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const n = noiseSrc(), lp = filt('lowpass', 2400, 1), g = gain(0.0001);
+    g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    n.connect(lp); lp.connect(g); g.connect(sfx); n.start(t, Math.random(), 0.1);
+
+    const s = noiseSrc(), bp = filt('bandpass', 700, 4), sg = gain(0.0001);
+    bp.frequency.setValueAtTime(900, t + 0.02); bp.frequency.exponentialRampToValueAtTime(160, t + 0.28);
+    sg.gain.setValueAtTime(0.0001, t + 0.02);
+    sg.gain.exponentialRampToValueAtTime(0.55, t + 0.05);
+    sg.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    s.connect(bp); bp.connect(sg); sg.connect(sfx); s.start(t + 0.02, Math.random(), 0.32);
+
+    const o = osc('sine', 150), og = gain(0.0001);
+    o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(50, t + 0.12);
+    og.gain.setValueAtTime(0.45, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    o.connect(og); og.connect(sfx); o.start(t); o.stop(t + 0.16);
+
+    [0.04, 0.09].forEach(dt => {
+      const c = noiseSrc(), cb = filt('highpass', 3000), cg = gain(0.0001);
+      cg.gain.setValueAtTime(0.3, t + dt); cg.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.02);
+      c.connect(cb); cb.connect(cg); cg.connect(sfx); c.start(t + dt, Math.random(), 0.03);
+    });
+  }
+
   // two metallic clicks: magazine out, magazine in
   function reload() {
     if (!ctx) return;
@@ -357,7 +384,7 @@ const Sound = (() => {
 
   return {
     init, resume, suspend, startMusic, setMood,
-    shot, hit, groan, hurt, pickup, reload, upgrade, wave, death, click: () => chime([86], 0, 0.1), toggle,
+    shot, hit, groan, hurt, pickup, reload, bite, upgrade, wave, death, click: () => chime([86], 0, 0.1), toggle,
     get enabled() { return enabled; },
   };
 })();

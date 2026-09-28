@@ -339,7 +339,8 @@ function drawZombie(z, pass) {
   const runner = type === 'runner';
   const bob = Math.abs(Math.sin(w)) * (runner ? 2.6 : 1.8) * m;
   const swing = runner ? 0.75 : type === 'brute' ? 0.32 : 0.42;
-  const lean = runner ? 0.42 : type === 'brute' ? 0.12 : 0.22;
+  const L = z.lunge || 0;
+  const lean = (runner ? 0.42 : type === 'brute' ? 0.12 : 0.22) + L * 0.28;
   const hipY = -21;
 
   // legs
@@ -354,7 +355,7 @@ function drawZombie(z, pass) {
 
   // back arm
   const sway = Math.sin(w * 0.5 + z.seed) * 0.12;
-  const backA = runner ? -0.3 + Math.sin(w) * 0.9 * m : -0.55 + sway;
+  const backA = lerp(runner ? -0.3 + Math.sin(w) * 0.9 * m : -0.55 + sway, -1.5, L);
   g.save(); g.translate(type === 'walker' ? 0 : 4, -17); zArm(backA, shadeHex(z.outfit, -22), [sk[1], sk[1]], shadeHex(z.outfit, -30), type === 'brute' ? 1.5 : 1, runner); g.restore();
 
   // torso
@@ -396,13 +397,13 @@ function drawZombie(z, pass) {
   const hx = runner ? 9 : type === 'brute' ? 7 : 8.5, hy = runner ? -30 : type === 'brute' ? -31 : -35;
   limbO(4, -20, hx - 3, hy + R * 0.6, runner ? 4 : 5.5, sk[1]);
   g.save();
-  g.translate(hx, hy + Math.sin(w * 0.5 + z.seed) * 0.6);
+  g.translate(hx + L * 4, hy + Math.sin(w * 0.5 + z.seed) * 0.6 + L * 2);
   g.rotate(-lean * 0.6 + Math.sin(w * 0.5 + z.seed * 2) * 0.05);
   zHead(z, R, sk, type);
   g.restore();
 
   // front arm hangs limp in front of the body
-  const frontA = runner ? -0.3 + Math.sin(w + Math.PI) * 0.9 * m : -0.45 - sway;
+  const frontA = lerp(runner ? -0.3 + Math.sin(w + Math.PI) * 0.9 * m : -0.45 - sway, -1.65, L);
   g.save(); g.translate(type === 'walker' ? 10 : 6, -17); zArm(frontA, z.outfit, sk, type === 'walker' ? '#d8d8cc' : shadeHex(z.outfit, -20), type === 'brute' ? 1.6 : 1.05, runner); g.restore();
 
   g.restore();
@@ -590,6 +591,8 @@ let wave = 0, toSpawn = 0, spawnT = 0, breakT = 0, kills = 0, score = 0;
 let best = +store.get('undead.best', 0) || 0;
 let groanT = 2;
 
+const BITE_WINDUP = 0.42, BITE_COOLDOWN = 0.5;
+
 const UPGRADES = [
   { k: 'mag', label: 'خشاب بزرگ‌تر' },
   { k: 'rate', label: 'شلیک و خشاب‌گذاری سریع‌تر' },
@@ -606,7 +609,7 @@ const UPGRADES = [
 
 function newPlayer() {
   return {
-    x: 0, y: 0, vx: 0, vy: 0, r: 12, hp: 100, maxHp: 100, speed: 125,
+    x: 0, y: 0, vx: 0, vy: 0, r: 12, hp: 100, maxHp: 100, speed: 112, grab: 0,
     walk: 0, moveAmt: 0, face: 1, aim: 0, t: 0, inv: 0, flash: 0, cool: 0,
     rate: 5, dmg: 1, multi: 1, pierce: 0, range: 340, up: 0, dead: 0,
     mag: 12, ammo: 12, reload: 0, reloadTime: 1.1, firing: false, aiming: false,
@@ -623,7 +626,8 @@ function startReload() {
 function makeZombie(type, x, y) {
   const skins = ZSKIN[type];
   const hpMul = 1 + (wave - 1) * 0.12;
-  const base = { walker: [3, 34, 11, 10], runner: [2, 78, 10, 8], brute: [14, 24, 18, 25] }[type];
+  // [hp, speed, radius, bite damage] — runners outpace the player on purpose
+  const base = { walker: [3, 44, 11, 9], runner: [2, 122, 10, 7], brute: [14, 33, 18, 22] }[type];
   return {
     type, x, y, r: base[2], hp: Math.ceil(base[0] * hpMul), maxHp: 0,
     speed: base[1] * (1 + Math.min(0.35, (wave - 1) * 0.03)) * rand(0.9, 1.1),
@@ -631,7 +635,7 @@ function makeZombie(type, x, y) {
     pants: pick(['#3d5a8a', '#46507a', '#4d4a3e', '#3a5560']), hairN: 3 + ((Math.random() * 4) | 0),
     eyeSwap: Math.random() < 0.3, lx: rand(-0.6, 0.9), ly: rand(-0.5, 0.6), num: 1 + ((Math.random() * 98) | 0),
     walk: Math.random() * TAU, moveAmt: 1, face: 1, flash: 0, kx: 0, ky: 0, seed: Math.random() * 10,
-    jaw: 0, dead: 0, dieDir: 1, tx: x, ty: y,
+    jaw: 0, dead: 0, dieDir: 1, tx: x, ty: y, atk: 0, lunge: 0,
   };
 }
 
@@ -821,15 +825,21 @@ function applyUpgrade() {
 }
 
 // ---------------------------------------------------------------- spawning
+// Just off-screen; while the player is moving, mostly in front of them so running away runs into more.
+function spawnPos() {
+  const R = Math.hypot(W / zoom / 2, H / zoom / 2) + 40;
+  const moving = Math.hypot(player.vx, player.vy) > 30;
+  const a = moving && Math.random() < 0.7 ? Math.atan2(player.vy, player.vx) + rand(-0.9, 0.9) : Math.random() * TAU;
+  return [player.x + Math.cos(a) * R, player.y + Math.sin(a) * R];
+}
+
 function spawnZombie() {
-  const halfW = W / zoom / 2, halfH = H / zoom / 2;
-  const R = Math.hypot(halfW, halfH) + 40;
-  const a = Math.random() * TAU;
   let type = 'walker';
   const r = Math.random();
   if (wave >= 3 && r < Math.min(0.2, 0.06 + wave * 0.015)) type = 'brute';
-  else if (wave >= 2 && r < Math.min(0.5, 0.25 + wave * 0.03)) type = 'runner';
-  zombies.push(makeZombie(type, player.x + Math.cos(a) * R, player.y + Math.sin(a) * R));
+  else if (r < Math.min(0.5, 0.1 + wave * 0.06)) type = 'runner';
+  const [x, y] = spawnPos();
+  zombies.push(makeZombie(type, x, y));
 }
 
 function blood(x, y, n, dirx = 0, diry = 0, h = 26) {
@@ -857,7 +867,10 @@ function update(dt) {
   const mag = Math.min(1, Math.hypot(mx, my));
   p.vx = lerp(p.vx, mx * p.speed, Math.min(1, dt * 12));
   p.vy = lerp(p.vy, my * p.speed, Math.min(1, dt * 12));
-  if (mode === 'play') { p.x += p.vx * dt; p.y += p.vy * dt; }
+  if (mode === 'play') {
+    const slow = Math.max(0.3, 1 - 0.28 * (p.grab || 0));
+    p.x += p.vx * slow * dt; p.y += p.vy * slow * dt;
+  }
   p.moveAmt = lerp(p.moveAmt, mode === 'play' ? mag : 0, Math.min(1, dt * 10));
   p.walk += dt * (6 + 8 * p.moveAmt) * p.moveAmt;
   if (Math.abs(p.vx) > 8) p.face = Math.sign(p.vx);
@@ -866,6 +879,8 @@ function update(dt) {
 
   // --- zombies
   const px = p.x, py = p.y;
+  let grabs = 0;
+  const leash = Math.hypot(W / zoom / 2, H / zoom / 2) + 220;
   for (const z of zombies) {
     if (z.dead) { z.dead += dt; z.flash = Math.max(0, z.flash - dt * 12); continue; }
     let dx, dy;
@@ -873,8 +888,14 @@ function update(dt) {
       if (Math.hypot(z.tx - z.x, z.ty - z.y) < 12) { const a = Math.random() * TAU, d = rand(120, 220); z.tx = px + Math.cos(a) * d; z.ty = py + Math.sin(a) * d; }
       dx = z.tx - z.x; dy = z.ty - z.y;
     } else { dx = px - z.x; dy = py - z.y; }
-    const d = Math.hypot(dx, dy) || 1;
-    const sp = z.speed * (mode === 'menu' ? 0.5 : 1) * (mode === 'over' ? 0.4 : 1);
+    let d = Math.hypot(dx, dy) || 1;
+    // stragglers left far behind come back from the direction the player is heading
+    if (mode === 'play' && d > leash) {
+      const [nx, ny] = spawnPos();
+      z.x = nx; z.y = ny; dx = px - z.x; dy = py - z.y; d = Math.hypot(dx, dy) || 1;
+    }
+    const inReach = mode === 'play' && d < z.r + p.r + 6;
+    const sp = inReach ? 0 : z.speed * (mode === 'menu' ? 0.5 : 1) * (mode === 'over' ? 0.4 : 1);
     z.x += (dx / d) * sp * dt + z.kx * dt;
     z.y += (dy / d) * sp * dt + z.ky * dt;
     z.kx *= Math.exp(-8 * dt); z.ky *= Math.exp(-8 * dt);
@@ -883,15 +904,28 @@ function update(dt) {
     z.flash = Math.max(0, z.flash - dt * 12);
     z.jaw = 0.5 + 0.5 * Math.sin(t * 7 + z.seed * 3);
 
-    if (mode === 'play' && d < z.r + p.r && p.inv <= 0) {
-      p.hp -= z.dmg; p.inv = 0.7; hurtFx = 1; shake = Math.max(shake, 0.6);
-      p.vx += (-dx / d) * 260; p.vy += (-dy / d) * 260;
-      p.x += (-dx / d) * 8; p.y += (-dy / d) * 8;
-      Sound.hurt();
-      if (navigator.vibrate) navigator.vibrate(40);
-      if (p.hp <= 0) { p.hp = 0; Sound.death(); blood(p.x, p.y, 20); decal(p.x, p.y, 14); gameOver(); }
-    }
+    // bite: stop, wind up (lunge), then chomp; each zombie on you also slows you down
+    if (mode === 'play' && d < z.r + p.r + 6) {
+      grabs++;
+      if (z.atk === 0 && Math.random() < 0.5) Sound.groan(0.16, z.type === 'brute' ? 0.7 : 1.15);
+      z.atk += dt;
+      if (z.atk >= BITE_WINDUP) {
+        z.atk = -BITE_COOLDOWN;
+        if (p.inv <= 0) {
+          p.hp -= z.dmg; p.inv = 0.22; hurtFx = 1; shake = Math.max(shake, z.type === 'brute' ? 0.9 : 0.55);
+          p.vx += (-dx / d) * 90; p.vy += (-dy / d) * 90;
+          blood(p.x, p.y, 8, -dx, -dy, 30);
+          Sound.bite(); Sound.hurt();
+          if (navigator.vibrate) navigator.vibrate(z.type === 'brute' ? 90 : 45);
+          if (p.hp <= 0) { p.hp = 0; Sound.death(); blood(p.x, p.y, 20); decal(p.x, p.y, 14); gameOver(); }
+        }
+      }
+    } else if (z.atk > 0) z.atk = Math.max(0, z.atk - dt * 2);
+    else if (z.atk < 0) z.atk = Math.min(0, z.atk + dt);
+    z.lunge = z.atk > 0 ? Math.min(1, z.atk / BITE_WINDUP) : Math.max(0, z.lunge - dt * 5);
+    if (z.lunge > 0) z.jaw = Math.max(z.jaw, z.lunge);
   }
+  p.grab = grabs;
   // separation
   for (let i = 0; i < zombies.length; i++) {
     const a = zombies[i]; if (a.dead) continue;
