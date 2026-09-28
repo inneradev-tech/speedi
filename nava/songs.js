@@ -39,23 +39,36 @@ const SONGS = [
       E5 D#5 E5 B4 D5 C5 | A4+A2 E3 A3 C4 E4 A4 | B4+E2 E3 G#3 E4 C5 B4 | A4+A2:2 E3 A3:2`,
   },
   {
-    // Melody line only; added with the composer's permission (obtained by the repository owner).
+    // Melody with the left-hand accompaniment folded into chords (Am–F–E–Dm–G). Where the melody
+    // rests and only the left hand plays, that chord becomes its own tile.
+    // Added with the permission of the composer (Ali Molaei) and the arranger (Mohsen Karbassi),
+    // obtained by the repository owner.
     id: 'shabe-toolani', cat: 'iranian', inst: 'piano', level: 3, speed: 4.2,
-    title: 'شب طولانی', by: 'علی مولایی · با اجازه‌ی آهنگساز',
+    title: 'شب طولانی', by: 'علی مولایی · تنظیم محسن کرباسی · با اجازه',
     notes: `
-      A4+C5+E5+A2:2 G#4+B4+E5+E2 F4+A4+D5+D3:3 | r D4 E4 F4 G#4 B4 |
-      A4+A2:2 E4:0.5 E4:0.5 E4 E4:2 | A4+A2:3 G#4+E2:3 | r:2 E4:0.5 E4:0.5 E4 E4:2 | A4+A2:3 G#4+E2:3 |
-      r:1.5 B4:0.5 B4 D5+D3 C5:2 | A4+A2:1.5 A4:0.5 A4 C5 B4 A4 | B4+E2:1.5 A4:0.5 G#4 A4 B4:2 | C5+A2:2 B4 A4:3 |
-      r:1.5 B4:0.5 B4 D5+D3 C5 B4 | A4+A2:1.5 A4:0.5 A4 C5 B4 A4 | B4+E2:1.5 A4:0.5 G#4 A4 B4:2 | C5+A2:2 B4 A4:3 |
-      r:1.5 A4:0.5 A4 A4 E4:2 | C5+A2:1.5 B4:0.5 C5 B4+E2:3 | r:1.5 A4:0.5 A4:0.5 A4:0.5 A4 E4:2 | C5+A2:1.5 B4:0.5 C5 B4+E2:3 |
-      r:1.5 B4:0.5 C5 D5+D3 D5:2 | D5+E2:1.5 D5:0.5 C5 D5 C5 B4 | B4+E2:1.5 B4:0.5 C5 D5:0.5 C5:0.5 D5:2 | D5+E2:1.5 D5:0.5 C5 D5 C5 B4 |
-      B4+E2:1.5 B4:0.5 C5 E5 E5:2 | E5+A2:1.5 D5:0.5 E5 C5:3 | D5+G2:1.5 C5:0.5 D5 B4:3 | C5+F2:2 A4 D5:2 C5 | B4+E2:3 r:3 |
-      A4+C5+E5+A2:2 G#4+B4+E5+E2 F4+A4+D5+D3:3 | r D4 E4 F4 G#4 B4 |
-      A4+A2:1.5 E5:0.5 E5 F5 E5:2 | F5+D3:2 E5 D5:3 | r:1.5 B4:0.5 E5 D5:3 | E5+A2:2 D5 C5:3 |
-      F5+D3:1.5 F5:0.5 F5 E5:0.5 E5:0.5 E5:2 | D5+G2:0.5 D5:2.5 D5:0.5 C5:2.5 |
-      r:1.5 B4:0.5 C5 D5+E2 E5:2 | E5+A2:1.5 E5:0.5 D5 C5:3 | r:1.5 D5:0.5 D5:0.5 E5:0.5 E5 D5:2 | E5+E2:1.5 E5:0.5 D5 C5:3 |
-      r:1.5 C5:0.5 C5 D5+D3 C5:2 | D5+D3:1.5 D5:0.5 C5 B4:3 | D5+E2:1.5 D5:0.5 D5 C5:0.5 C5:0.5 C5:2 |
-      B4+E2 B4:2 B4 A4:2 | G#4+E2 A4 B4 B4:3 | C5+A4+E4+A2 C5 B4+G#4+E2 A4+C5+E5+A2:3`,
+      A4+C5+E5+A2+A3:2 G#4+B4+E5+G#2+G#3 F4+A4+D5+F2+F3:3 | r D4+D3 E4+E3 F4+F3 G#4+G#3 B4+B3 |
+      A4+A2+A3:2 E4:0.5 E4:0.5 E4 E4:2 | A4+F3+A3+C4:3 G#4+E3+G#3+B3:3 |
+      A2:2 E4:0.5 E4:0.5 E4 E4:2 | A4+F3+A3+C4:3 G#4+E3+G#3+B3:3 |
+      D3+F3+A3:1.5 B4:0.5 B4 D5 C5:2 | A4+F3+A3+C4:1.5 A4:0.5 A4 C5 B4 A4 |
+      B4+E3+G#3+B3:1.5 A4:0.5 G#4 A4+E3+G#3+B3 B4:2 | C5+F3+A3+C4:2 B4+E3+G#3+B3 A4+E3+A3+C4:3 |
+      D3+F3+A3:1.5 B4:0.5 B4 D5+D3+F3+A3 C5 B4 | A4+F3+A3+C4:1.5 A4:0.5 A4 C5 B4 A4 |
+      B4+E3+G#3+B3:1.5 A4:0.5 G#4 A4+E3+G#3+B3 B4:2 | C5+F3+A3+C4:2 B4+E3+G#3+B3 A4+E3+A3+C4:3 |
+      A2:1.5 A4:0.5 A4 A4 E4:2 | C5+A2+E3:1.5 B4:0.5 C5 B4+E2+G#3:3 |
+      A2:1.5 A4:0.5 A4:0.5 A4:0.5 A4 E4:2 | C5+A2+E3:1.5 B4:0.5 C5 B4+E2+G#3:3 |
+      A2+E3:1.5 B4:0.5 C5 D5+D3+F3 D5:2 | D5+E2+G#3:1.5 D5:0.5 C5 D5+E3+B3 C5 B4 |
+      B4+E2+G#3:1.5 B4:0.5 C5 D5+E3+B3:0.5 C5:0.5 D5:2 | D5+E2+G#3:1.5 D5:0.5 C5 D5+E3+B3 C5 B4 |
+      B4+E2+G#3:1.5 B4:0.5 C5 E5+A2+E3 E5:2 | E5+A2+E3+C4:1.5 D5:0.5 E5 C5+A2+E3:3 |
+      D5+G2+B3+D4:1.5 C5:0.5 D5 B4+G2+D3:3 | C5+F2+A3:2 A4 D5+D3+F3:2 C5 | B4+E2+G#3:3 E3+G#3+B3:3 |
+      A4+C5+E5+A2+A3:2 G#4+B4+E5+G#2+G#3 F4+A4+D5+F2+F3:3 | r D4+D3 E4+E3 F4+F3 G#4+G#3 B4+B3 |
+      A4+A2+A3:1.5 E5:0.5 E5 F5 E5:2 | F5+D3+A3:2 E5 D5+D3+F3:3 |
+      E2+G#3+B3:1.5 B4:0.5 E5 D5+A2+E3:3 | E5+A2+E3+C4:2 D5 C5+A2+E3:3 |
+      F5+D3+A3:1.5 F5:0.5 F5 E5+D3+F3:0.5 E5:0.5 E5:2 | D5+D3+F3+A3:0.5 D5:2.5 D5+D3+F3:0.5 C5:2.5 |
+      E2+G#3:1.5 B4:0.5 C5 D5+E2+B3 E5:2 | E5+A2+E3+C4:1.5 E5:0.5 D5 C5+A2+E3:3 |
+      D3+F3+A3:1.5 D5:0.5 D5:0.5 E5:0.5 E5+D3+F3 D5:2 | E5+E2+G#3:1.5 E5:0.5 D5 C5+A2+E3:3 |
+      D3+F3+A3:1.5 C5:0.5 C5 D5+D3+A3 C5:2 | D5+D3+F3:1.5 D5:0.5 C5 B4+D3+F3:3 |
+      D5+E2+G#3:1.5 D5:0.5 D5 C5+E3+B3:0.5 C5:0.5 C5:2 |
+      B4+E2+G#3 B4:2 B4+E2+B3 A4:2 | G#4+D3+F3 A4 B4 B4+D3+A3:3 |
+      C5+A4+E4+A3 C5+A4+E4 B4+G#4+E4+E3 A4+C5+E5+A2+A3:3`,
   },
   {
     id: 'shur', cat: 'iranian', inst: 'santur', level: 1, speed: 3,
