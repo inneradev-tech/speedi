@@ -104,6 +104,23 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
   text-shadow: 0 1px 2px #000;
 }
 
+#ammo {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  direction: ltr;
+  font-size: 12px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: #ffd36b;
+  text-shadow: 0 1px 2px #000;
+}
+#ammo.low { color: #ff5a5a; animation: pulse .6s ease-in-out infinite; }
+#ammo.reloading { color: var(--bone); opacity: .8; }
+
+canvas { cursor: crosshair; }
+
 #banner {
   position: fixed;
   left: 0; right: 0;

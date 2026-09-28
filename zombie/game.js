@@ -17,6 +17,7 @@ const mk = (w, h) => {
   c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h));
   return [c, c.getContext('2d')];
 };
+const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 function seeded(seed) {
   let s = seed >>> 0;
   return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -590,13 +591,15 @@ let best = +store.get('undead.best', 0) || 0;
 let groanT = 2;
 
 const UPGRADES = [
-  { k: 'rate', label: 'شلیک سریع‌تر' },
+  { k: 'mag', label: 'خشاب بزرگ‌تر' },
+  { k: 'rate', label: 'شلیک و خشاب‌گذاری سریع‌تر' },
   { k: 'multi', label: 'گلوله‌ی دوتایی' },
   { k: 'dmg', label: 'گلوله‌ی قوی‌تر' },
   { k: 'speed', label: 'سرعت بیشتر' },
   { k: 'pierce', label: 'گلوله‌ی نافذ' },
   { k: 'hp', label: 'جان بیشتر' },
-  { k: 'rate', label: 'شلیک سریع‌تر' },
+  { k: 'mag', label: 'خشاب بزرگ‌تر' },
+  { k: 'rate', label: 'شلیک و خشاب‌گذاری سریع‌تر' },
   { k: 'multi', label: 'گلوله‌ی سه‌تایی' },
   { k: 'dmg', label: 'گلوله‌ی قوی‌تر' },
 ];
@@ -605,8 +608,16 @@ function newPlayer() {
   return {
     x: 0, y: 0, vx: 0, vy: 0, r: 12, hp: 100, maxHp: 100, speed: 125,
     walk: 0, moveAmt: 0, face: 1, aim: 0, t: 0, inv: 0, flash: 0, cool: 0,
-    rate: 4.2, dmg: 1, multi: 1, pierce: 0, range: 300, up: 0, dead: 0,
+    rate: 5, dmg: 1, multi: 1, pierce: 0, range: 340, up: 0, dead: 0,
+    mag: 12, ammo: 12, reload: 0, reloadTime: 1.1, firing: false, aiming: false,
   };
+}
+
+function startReload() {
+  const p = player;
+  if (p.reload > 0 || p.ammo === p.mag) return;
+  p.reload = p.reloadTime;
+  Sound.reload();
 }
 
 function makeZombie(type, x, y) {
@@ -625,30 +636,53 @@ function makeZombie(type, x, y) {
 }
 
 // ---------------------------------------------------------------- input
+// Twin-stick: left half of the screen moves, right half aims and fires.
+// With a mouse: aim with the pointer, hold the button to fire.
 const keys = new Set();
-const stick = { id: null, ox: 0, oy: 0, x: 0, y: 0, dx: 0, dy: 0 };
 const STICK_R = 52;
+const newStick = () => ({ id: null, ox: 0, oy: 0, dx: 0, dy: 0 });
+const moveStick = newStick(), aimStick = newStick();
+const mouse = { x: 0, y: 0, down: false, active: false };
+const isTouch = matchMedia('(pointer: coarse)').matches;
+
+function resetInput() {
+  for (const s of [moveStick, aimStick]) { s.id = null; s.dx = s.dy = 0; }
+  mouse.down = false;
+}
 
 window.addEventListener('pointerdown', e => {
-  if (mode !== 'play' || stick.id !== null) return;
+  if (e.pointerType === 'mouse') { mouse.x = e.clientX; mouse.y = e.clientY; }
+  if (mode !== 'play') return;
   if (e.target.closest('.overlay, .icon-btn')) return;
-  stick.id = e.pointerId; stick.ox = stick.x = e.clientX; stick.oy = stick.y = e.clientY; stick.dx = stick.dy = 0;
+  if (e.pointerType === 'mouse') {
+    mouse.active = true;
+    if (e.button === 0) mouse.down = true;
+    return;
+  }
+  const s = e.clientX < W / 2 ? moveStick : aimStick;
+  if (s.id !== null) return;
+  s.id = e.pointerId; s.ox = e.clientX; s.oy = e.clientY; s.dx = s.dy = 0;
 });
 window.addEventListener('pointermove', e => {
-  if (e.pointerId !== stick.id) return;
-  let dx = e.clientX - stick.ox, dy = e.clientY - stick.oy;
-  const d = Math.hypot(dx, dy);
-  if (d > STICK_R) {
-    // drag the base along so direction changes stay responsive
-    stick.ox += dx * (1 - STICK_R / d); stick.oy += dy * (1 - STICK_R / d);
-    dx = e.clientX - stick.ox; dy = e.clientY - stick.oy;
+  if (e.pointerType === 'mouse') { mouse.x = e.clientX; mouse.y = e.clientY; if (mode === 'play') mouse.active = true; return; }
+  for (const s of [moveStick, aimStick]) {
+    if (e.pointerId !== s.id) continue;
+    let dx = e.clientX - s.ox, dy = e.clientY - s.oy;
+    const d = Math.hypot(dx, dy);
+    if (d > STICK_R) {
+      // drag the base along so direction changes stay responsive
+      s.ox += dx * (1 - STICK_R / d); s.oy += dy * (1 - STICK_R / d);
+      dx = e.clientX - s.ox; dy = e.clientY - s.oy;
+    }
+    s.dx = dx / STICK_R; s.dy = dy / STICK_R;
   }
-  stick.x = e.clientX; stick.y = e.clientY;
-  stick.dx = dx / STICK_R; stick.dy = dy / STICK_R;
 });
-const endStick = e => { if (e.pointerId === stick.id) { stick.id = null; stick.dx = stick.dy = 0; } };
-window.addEventListener('pointerup', endStick);
-window.addEventListener('pointercancel', endStick);
+const endPointer = e => {
+  if (e.pointerType === 'mouse') { if (e.button === 0 || e.type === 'pointercancel') mouse.down = false; return; }
+  for (const s of [moveStick, aimStick]) if (e.pointerId === s.id) { s.id = null; s.dx = s.dy = 0; }
+};
+window.addEventListener('pointerup', endPointer);
+window.addEventListener('pointercancel', endPointer);
 window.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
@@ -662,13 +696,14 @@ window.addEventListener('keydown', e => {
   } else if (k === 'Escape' || k === 'KeyP') {
     if (mode === 'play') pauseGame(); else if (mode === 'pause') resumeGame();
   } else if (k === 'KeyM') toggleSound();
+  else if (k === 'KeyR') { if (mode === 'play') startReload(); }
   else return;
   e.preventDefault();
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
 
 function moveInput() {
-  let x = stick.dx, y = stick.dy;
+  let x = moveStick.dx, y = moveStick.dy;
   if (keys.has('ArrowLeft') || keys.has('KeyA')) x -= 1;
   if (keys.has('ArrowRight') || keys.has('KeyD')) x += 1;
   if (keys.has('ArrowUp') || keys.has('KeyW')) y -= 1;
@@ -681,7 +716,7 @@ function moveInput() {
 // ---------------------------------------------------------------- UI
 const $ = id => document.getElementById(id);
 const ui = {
-  hud: $('hud'), score: $('score'), wave: $('waveLabel'), hpFill: $('hpFill'), hpText: $('hpText'),
+  hud: $('hud'), score: $('score'), ammo: $('ammo'), ammoText: $('ammoText'), wave: $('waveLabel'), hpFill: $('hpFill'), hpText: $('hpText'),
   banner: $('banner'), bannerTitle: $('bannerTitle'), bannerSub: $('bannerSub'),
   menu: $('menu'), menuBest: $('menuBest'), over: $('over'), pause: $('pause'),
   finalScore: $('finalScore'), finalWave: $('finalWave'), finalKills: $('finalKills'), overBest: $('overBest'), newBest: $('newBest'),
@@ -722,7 +757,7 @@ function startRun() {
   player = newPlayer(); player.x = keepX; player.y = keepY;
   zombies = []; bullets = []; parts = []; pickups = [];
   wave = 0; kills = 0; score = 0; hurtFx = 0;
-  stick.id = null; stick.dx = stick.dy = 0;
+  resetInput();
   mode = 'play';
   nextWave();
   show(ui.menu, false); show(ui.over, false); show(ui.pause, false); show(ui.hud, true);
@@ -739,7 +774,7 @@ function nextWave() {
 
 function pauseGame() {
   if (mode !== 'play') return;
-  mode = 'pause'; stick.id = null; stick.dx = stick.dy = 0;
+  mode = 'pause'; resetInput();
   show(ui.pause, true);
   Sound.suspend();
 }
@@ -771,7 +806,8 @@ function applyUpgrade() {
   const loop = Math.floor(player.up / UPGRADES.length);
   player.up++;
   switch (u.k) {
-    case 'rate': player.rate *= 1.25; break;
+    case 'rate': player.rate *= 1.2; player.reloadTime *= 0.85; break;
+    case 'mag': player.mag += 6; player.ammo = player.mag; player.reload = 0; break;
     case 'multi': player.multi = Math.min(5, player.multi + 1); break;
     case 'dmg': player.dmg += 1; break;
     case 'speed': player.speed *= 1.12; break;
@@ -779,6 +815,7 @@ function applyUpgrade() {
     case 'hp': player.maxHp += 25; player.hp += 25; break;
   }
   player.hp = Math.min(player.maxHp, player.hp + 20);
+  player.ammo = player.mag; player.reload = 0;
   Sound.upgrade();
   return loop > 0 && u.k === 'multi' ? 'گلوله‌ی بیشتر' : u.label;
 }
@@ -873,32 +910,55 @@ function update(dt) {
   zombies = zombies.filter(z => z.dead < 1.6 && Math.hypot(z.x - px, z.y - py) < 1400);
 
   if (mode === 'play') {
-    // --- shooting (auto-aim at nearest zombie)
+    // --- aiming & shooting (player-controlled)
     p.cool -= dt;
-    let target = null, bd = p.range;
-    for (const z of zombies) {
-      if (z.dead) continue;
-      const d = Math.hypot(z.x - px, z.y - py);
-      if (d < bd) { bd = d; target = z; }
-    }
-    if (target) {
-      // zombies walk straight at the player, so lead the shot along that line
-      const lead = target.speed * bd / 720 / (bd || 1);
-      p.aim = Math.atan2(target.y + (py - target.y) * lead - py, target.x + (px - target.x) * lead - px);
-      p.face = Math.cos(p.aim) >= 0 ? 1 : -1;
-      if (p.cool <= 0) {
-        p.cool = 1 / p.rate;
-        const spread = 0.13;
-        for (let i = 0; i < p.multi; i++) {
-          const a = p.aim + (i - (p.multi - 1) / 2) * spread + rand(-0.03, 0.03);
-          bullets.push({ x: px + Math.cos(a) * 24, y: py + Math.sin(a) * 24, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, life: p.range / 720 + 0.05, pierce: p.pierce, hit: [] });
-        }
-        p.flash = 1;
-        parts.push({ k: 'shell', x: px, y: py, z: 28, vx: -Math.cos(p.aim) * 40 + rand(-30, 30), vy: rand(-20, 20), vz: rand(60, 110), life: 1.2, t: 0, rot: 0 });
-        Sound.shot();
+    let aimA = null;
+    p.firing = false;
+    const aMag = Math.hypot(aimStick.dx, aimStick.dy);
+    if (aimStick.id !== null && aMag > 0.25) {
+      aimA = Math.atan2(aimStick.dy, aimStick.dx);
+      p.firing = true;
+      // light aim assist for thumbs: snap to a zombie within a narrow cone
+      let bestD = p.range, snap = null;
+      for (const z of zombies) {
+        if (z.dead) continue;
+        const d = Math.hypot(z.x - px, z.y - py);
+        if (d > bestD) continue;
+        const za = Math.atan2(z.y - py, z.x - px);
+        if (Math.abs(angDiff(za, aimA)) < 0.16) { bestD = d; snap = za; }
       }
+      if (snap !== null) aimA = snap;
+    } else if (mouse.active) {
+      const sx = (px - cam.x) * zoom + W / 2, sy = (py - 26 - cam.y) * zoom + H / 2;
+      aimA = Math.atan2(mouse.y - sy, mouse.x - sx);
+      p.firing = mouse.down;
+    }
+    p.aiming = aimA !== null;
+    if (aimA !== null) {
+      p.aim = aimA;
+      p.face = Math.cos(p.aim) >= 0 ? 1 : -1;
     } else {
-      p.aim = lerp(p.aim, p.face > 0 ? 0 : Math.PI, 0.2);
+      // gun and flashlight follow the walking direction
+      const moveA = mag > 0.2 ? Math.atan2(p.vy, p.vx) : (p.face > 0 ? 0 : Math.PI);
+      p.aim += angDiff(moveA, p.aim) * Math.min(1, dt * 10);
+    }
+
+    if (p.reload > 0) {
+      p.reload -= dt;
+      if (p.reload <= 0) { p.reload = 0; p.ammo = p.mag; }
+    } else if (p.firing && p.cool <= 0 && p.ammo > 0) {
+      p.cool = 1 / p.rate;
+      p.ammo--;
+      const spread = 0.13;
+      for (let i = 0; i < p.multi; i++) {
+        const a = p.aim + (i - (p.multi - 1) / 2) * spread + rand(-0.035, 0.035);
+        bullets.push({ x: px + Math.cos(a) * 24, y: py + Math.sin(a) * 24, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, life: p.range / 720 + 0.05, pierce: p.pierce, hit: [] });
+      }
+      p.flash = 1;
+      p.vx -= Math.cos(p.aim) * 18; p.vy -= Math.sin(p.aim) * 18;
+      parts.push({ k: 'shell', x: px, y: py, z: 28, vx: -Math.cos(p.aim) * 40 + rand(-30, 30), vy: rand(-20, 20), vz: rand(60, 110), life: 1.2, t: 0, rot: 0 });
+      Sound.shot();
+      if (p.ammo === 0) startReload();
     }
 
     // --- waves
@@ -1172,6 +1232,26 @@ function render() {
     ctx.beginPath(); ctx.ellipse(p.x, p.y, 17, 6, 0, 0, TAU); ctx.stroke();
     ctx.strokeStyle = f > 0.5 ? '#6ee07a' : f > 0.25 ? '#f2c14e' : '#ff4d4d';
     ctx.beginPath(); ctx.ellipse(p.x, p.y, 17, 6, 0, -Math.PI / 2, -Math.PI / 2 + TAU * f); ctx.stroke();
+
+    // laser sight while aiming (visible in the dark)
+    if (p.aiming && p.reload <= 0) {
+      const mx0 = p.x + Math.cos(p.aim) * 30, my0 = p.y - 26 + Math.sin(p.aim) * 30;
+      const grd = ctx.createLinearGradient(mx0, my0, mx0 + Math.cos(p.aim) * 150, my0 + Math.sin(p.aim) * 150);
+      grd.addColorStop(0, 'rgba(255,60,60,.7)'); grd.addColorStop(1, 'rgba(255,60,60,0)');
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = grd; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(mx0, my0); ctx.lineTo(mx0 + Math.cos(p.aim) * 150, my0 + Math.sin(p.aim) * 150); ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    // reload ring above the head
+    if (p.reload > 0) {
+      const k = 1 - p.reload / p.reloadTime;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,.5)';
+      ctx.beginPath(); ctx.arc(p.x, p.y - 76, 8, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = '#ffd36b';
+      ctx.beginPath(); ctx.arc(p.x, p.y - 76, 8, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
+    }
   }
 
   // screen-space overlays
@@ -1183,20 +1263,51 @@ function render() {
     grd.addColorStop(0, 'rgba(160,0,0,0)'); grd.addColorStop(1, `rgba(160,0,0,${0.6 * hv})`);
     ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
   }
-  if (stick.id !== null) {
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_R, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.35)';
-    ctx.beginPath(); ctx.arc(stick.ox + stick.dx * STICK_R, stick.oy + stick.dy * STICK_R, 22, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 1;
+  if (mode === 'play' && isTouch) {
+    const sb = Math.min(110, H * 0.16);
+    drawStick(moveStick, 70 + 16, H - sb, 'rgba(255,255,255,.35)', null);
+    drawStick(aimStick, W - 70 - 16, H - sb, 'rgba(255,90,80,.55)', 'crosshair');
+  }
+  if (mode === 'play' && mouse.active && !isTouch) {
+    ctx.strokeStyle = mouse.down ? '#ff5a4a' : 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 9, 0, TAU);
+    ctx.moveTo(mouse.x - 14, mouse.y); ctx.lineTo(mouse.x - 5, mouse.y); ctx.moveTo(mouse.x + 5, mouse.y); ctx.lineTo(mouse.x + 14, mouse.y);
+    ctx.moveTo(mouse.x, mouse.y - 14); ctx.lineTo(mouse.x, mouse.y - 5); ctx.moveTo(mouse.x, mouse.y + 5); ctx.lineTo(mouse.x, mouse.y + 14);
+    ctx.stroke();
   }
 }
 
+// Active sticks appear where the thumb landed; idle ones show as faint hints at their home spot.
+function drawStick(s, hx, hy, knobCol, icon) {
+  const on = s.id !== null;
+  const ox = on ? s.ox : hx, oy = on ? s.oy : hy;
+  ctx.globalAlpha = on ? 0.95 : 0.4;
+  ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(ox, oy, STICK_R, 0, TAU); ctx.fill(); ctx.stroke();
+  const kx = ox + s.dx * STICK_R, ky = oy + s.dy * STICK_R;
+  ctx.fillStyle = knobCol;
+  ctx.beginPath(); ctx.arc(kx, ky, 22, 0, TAU); ctx.fill();
+  if (icon) {
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.arc(kx, ky, 8, 0, TAU);
+    ctx.moveTo(kx - 13, ky); ctx.lineTo(kx - 4, ky); ctx.moveTo(kx + 4, ky); ctx.lineTo(kx + 13, ky);
+    ctx.moveTo(kx, ky - 13); ctx.lineTo(kx, ky - 4); ctx.moveTo(kx, ky + 4); ctx.lineTo(kx, ky + 13);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
 // ---------------------------------------------------------------- HUD
-let hudScore = -1, hudHp = -1, hudWave = -1;
+let hudScore = -1, hudHp = -1, hudWave = -1, hudAmmo = '';
 function updateHud() {
   if (mode !== 'play') return;
+  const am = player.reload > 0 ? 'R' : player.ammo + '/' + player.mag;
+  if (am !== hudAmmo) {
+    hudAmmo = am;
+    ui.ammo.classList.toggle('reloading', player.reload > 0);
+    ui.ammo.classList.toggle('low', player.reload <= 0 && player.ammo <= Math.ceil(player.mag * 0.25));
+    ui.ammoText.textContent = player.reload > 0 ? 'پر کردن…' : `${player.ammo} / ${player.mag}`;
+  }
   if (score !== hudScore) { hudScore = score; ui.score.textContent = score.toLocaleString('en-US'); }
   if (wave !== hudWave) { hudWave = wave; ui.wave.textContent = `موج ${faNum(wave)}`; }
   const hp = Math.ceil(player.hp) + player.maxHp * 1000;

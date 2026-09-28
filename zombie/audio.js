@@ -306,6 +306,17 @@ const Sound = (() => {
       o.start(s); o.stop(s + 0.55);
     });
   }
+  // two metallic clicks: magazine out, magazine in
+  function reload() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [[0, 2600], [0.32, 1800], [0.42, 3200]].forEach(([dt, f]) => {
+      const n = noiseSrc(), bp = filt('bandpass', f, 6), g = gain(0.0001);
+      g.gain.setValueAtTime(0.35, t + dt); g.gain.exponentialRampToValueAtTime(0.001, t + dt + 0.05);
+      n.connect(bp); bp.connect(g); g.connect(sfx); n.start(t + dt, Math.random(), 0.07);
+    });
+  }
+
   const pickup = () => chime([81, 88]);
   const upgrade = () => chime([74, 77, 81, 86], 0.08, 0.13);
 
@@ -346,7 +357,7 @@ const Sound = (() => {
 
   return {
     init, resume, suspend, startMusic, setMood,
-    shot, hit, groan, hurt, pickup, upgrade, wave, death, click: () => chime([86], 0, 0.1), toggle,
+    shot, hit, groan, hurt, pickup, reload, upgrade, wave, death, click: () => chime([86], 0, 0.1), toggle,
     get enabled() { return enabled; },
   };
 })();
