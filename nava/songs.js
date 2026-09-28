@@ -39,6 +39,25 @@ const SONGS = [
       E5 D#5 E5 B4 D5 C5 | A4+A2 E3 A3 C4 E4 A4 | B4+E2 E3 G#3 E4 C5 B4 | A4+A2:2 E3 A3:2`,
   },
   {
+    // Melody line only; added with the composer's permission (obtained by the repository owner).
+    id: 'shabe-toolani', cat: 'iranian', inst: 'piano', level: 3, speed: 4.2,
+    title: 'شب طولانی', by: 'علی مولایی · با اجازه‌ی آهنگساز',
+    notes: `
+      A4+C5+E5+A2:2 G#4+B4+E5+E2 F4+A4+D5+D3:3 | r D4 E4 F4 G#4 B4 |
+      A4+A2:2 E4:0.5 E4:0.5 E4 E4:2 | A4+A2:3 G#4+E2:3 | r:2 E4:0.5 E4:0.5 E4 E4:2 | A4+A2:3 G#4+E2:3 |
+      r:1.5 B4:0.5 B4 D5+D3 C5:2 | A4+A2:1.5 A4:0.5 A4 C5 B4 A4 | B4+E2:1.5 A4:0.5 G#4 A4 B4:2 | C5+A2:2 B4 A4:3 |
+      r:1.5 B4:0.5 B4 D5+D3 C5 B4 | A4+A2:1.5 A4:0.5 A4 C5 B4 A4 | B4+E2:1.5 A4:0.5 G#4 A4 B4:2 | C5+A2:2 B4 A4:3 |
+      r:1.5 A4:0.5 A4 A4 E4:2 | C5+A2:1.5 B4:0.5 C5 B4+E2:3 | r:1.5 A4:0.5 A4:0.5 A4:0.5 A4 E4:2 | C5+A2:1.5 B4:0.5 C5 B4+E2:3 |
+      r:1.5 B4:0.5 C5 D5+D3 D5:2 | D5+E2:1.5 D5:0.5 C5 D5 C5 B4 | B4+E2:1.5 B4:0.5 C5 D5:0.5 C5:0.5 D5:2 | D5+E2:1.5 D5:0.5 C5 D5 C5 B4 |
+      B4+E2:1.5 B4:0.5 C5 E5 E5:2 | E5+A2:1.5 D5:0.5 E5 C5:3 | D5+G2:1.5 C5:0.5 D5 B4:3 | C5+F2:2 A4 D5:2 C5 | B4+E2:3 r:3 |
+      A4+C5+E5+A2:2 G#4+B4+E5+E2 F4+A4+D5+D3:3 | r D4 E4 F4 G#4 B4 |
+      A4+A2:1.5 E5:0.5 E5 F5 E5:2 | F5+D3:2 E5 D5:3 | r:1.5 B4:0.5 E5 D5:3 | E5+A2:2 D5 C5:3 |
+      F5+D3:1.5 F5:0.5 F5 E5:0.5 E5:0.5 E5:2 | D5+G2:0.5 D5:2.5 D5:0.5 C5:2.5 |
+      r:1.5 B4:0.5 C5 D5+E2 E5:2 | E5+A2:1.5 E5:0.5 D5 C5:3 | r:1.5 D5:0.5 D5:0.5 E5:0.5 E5 D5:2 | E5+E2:1.5 E5:0.5 D5 C5:3 |
+      r:1.5 C5:0.5 C5 D5+D3 C5:2 | D5+D3:1.5 D5:0.5 C5 B4:3 | D5+E2:1.5 D5:0.5 D5 C5:0.5 C5:0.5 C5:2 |
+      B4+E2 B4:2 B4 A4:2 | G#4+E2 A4 B4 B4:3 | C5+A4+E4+A2 C5 B4+G#4+E2 A4+C5+E5+A2:3`,
+  },
+  {
     id: 'shur', cat: 'iranian', inst: 'santur', level: 1, speed: 3,
     title: 'شبانه‌ی شور', by: 'دستگاه شور · ساخته‌ی نوا',
     notes: `

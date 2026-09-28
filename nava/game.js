@@ -175,7 +175,7 @@ function renderList() {
   }
   ui.list.innerHTML = list.map(s => {
     const b = best[s.id] || { score: 0, stars: 0 };
-    const lvl = s.level ? '<i class="lvl">' + '●'.repeat(s.level) + '<b>' + '●'.repeat(3 - s.level) + '</b></i>' : '';
+    const lvl = s.level ? '<i class="lvl">' + '●'.repeat(s.level) + '<span class="off">' + '●'.repeat(3 - s.level) + '</span></i>' : '';
     return `<button class="song ${s.inst}" data-id="${esc(s.id)}">
       <span class="ic">${ICONS[s.inst] || ICONS.piano}</span>
       <span class="meta"><b>${esc(s.title)}</b><small>${esc(s.by || (s.inst === 'santur' ? 'سنتور' : 'پیانو'))} ${lvl}</small></span>
