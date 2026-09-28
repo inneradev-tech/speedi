@@ -170,6 +170,7 @@ const TONBAK = {
   3: [[0, 'tom', 1], [1, 'bak', 0.55], [2, 'bak', 0.62]],
   4: [[0, 'tom', 1], [1, 'bak', 0.6], [2, 'tom', 0.78], [2.5, 'bak', 0.35], [3, 'bak', 0.62]],
   6: [[0, 'tom', 1], [2, 'bak', 0.55], [3, 'tom', 0.75], [4, 'bak', 0.45], [5, 'bak', 0.6]],
+  12: [[0, 'tom', 1], [2, 'bak', 0.5], [3, 'bak', 0.6], [5, 'bak', 0.45], [6, 'tom', 0.8], [8, 'bak', 0.5], [9, 'bak', 0.6], [11, 'bak', 0.45]],
 };
 function barPattern(n) {
   if (TONBAK[n]) return TONBAK[n];
@@ -449,6 +450,9 @@ async function startSong(s) {
   pos = 0; score = 0; hits = 0; hold = null; floats = [];
   streak = 0; maxStreak = 0; judged = { perfect: 0, great: 0, ok: 0 }; flash = 0; lap = 1; speedMul = 1; fail = null; ripples = [];
   genTiles(12);
+  // a song that opens with rests: start with its first tile in the usual place, not above the screen
+  const first = tiles.find(o => !o.marker);
+  if (first) { pos = first.b; genTiles(pos + 12); }
   firstLapTiles = events.filter(e => !e.rest).length;
   hudScore = -1; hudProg = -1; hudStreak = -1;
   mode = 'ready';
