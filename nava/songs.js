@@ -42,6 +42,59 @@ const SONGS = [
       E5 D#5 E5 B4 D5 C5 | A4+A2 E3 A3 C4 E4 A4 | B4+E2 E3 G#3 E4 C5 B4 | A4+A2:2 E3 A3:2`,
   },
   {
+    // Transcribed from the easy piano arrangement by lucky37 (arrangement marked CC-BY).
+    // Composition by Ramin Djawadi; included on the basis of the full licence (HBO and performers)
+    // that the repository owner states they hold. Remove this entry if that licence ever lapses.
+    // 3/4 in C minor, one beat = one quarter.
+    id: 'got', cat: 'classic', inst: 'piano', level: 2, speed: 4.4,
+    title: 'Game of Thrones', by: 'رامین جوادی · تنظیم lucky37 · با اجازه',
+    notes: (() => {
+      const a = 'G4 C4 Eb4:0.5 F4:0.5', b = 'G4 C4 E4:0.5 F4:0.5';
+      const s1 = ['G4:3', 'C4:3', 'Eb4+C4:0.5 F4:0.5 G4:2', 'C4:2 Eb4:0.5 F4:0.5',
+        'D4+Bb3 G3 Bb3:0.5 C4:0.5', 'D4 G3 Bb3:0.5 C4:0.5', 'D4+Bb3 G3 Bb3:0.5 C4:0.5', 'D4 G3 Bb3',
+        'F4:3', 'Bb3:3', 'Eb4+Bb3:0.5 D4:0.5 F4:2', 'Bb3:2 Eb4:0.5 D4:0.5'];
+      const c1 = 'C4+Ab3 F3 Ab3:0.5 Bb3:0.5', c2 = 'C4 F3 Ab3:0.5 Bb3:0.5';
+      const d1 = 'C4+Ab3 G3 Ab3:0.5 Bb3:0.5', d2 = 'C4 G3 Ab3:0.5 Bb3:0.5';
+      const hi = ['C5 Eb4 Ab4:0.5 Bb4:0.5', 'C5 Eb4 Ab4:0.5 C5:0.5', 'Bb4 Eb4 G4:0.5 Ab4:0.5'];
+      const lo = ['Ab4 C4 F4:0.5 G4:0.5', 'Ab4 C4 G4:0.5 Ab4:0.5', a];
+      const e1 = 'Eb4 Ab3 C4:0.5 D4:0.5';
+      return bars(a, a, a, a, b, b, b, b,
+        ...s1, c1, c2, c1, 'C4 F3 Ab3',
+        ...s1, d1, d2, d1, 'C4 G3 C4',
+        'G4:3', 'C4:3', 'Eb4+C4:0.5 F4:0.5 G4:2', 'C4:2 Eb4:0.5 F4:0.5',
+        'D4:2 Bb3:0.5 C4:0.5', 'D4:2 Bb3:0.5 C4:0.5', 'D4:2 Bb3:0.5 C4:0.5', 'D4 Bb3 D4',
+        'F4:3', 'Bb3:3', 'D4:2 Eb4', 'D4:3',
+        d2, d2, d2, 'C4+G3 C4+G3 C4+G3',
+        ...hi, 'Bb4 Eb4 G4:0.5 Bb4:0.5', ...lo, a,
+        e1, e1, 'Eb4 Ab3 Eb4', 'F4 Eb4 F4',
+        a, a, a, 'G4 Ab4 C5',
+        ...hi, 'Bb4 Eb4 G4', ...lo, 'G4 C4 D4',
+        e1, e1, 'Eb4 Ab3 Eb4', 'D4 G3 D4',
+        d2, d2, d2, d2,
+        'C4 G4 Ab4:0.5 Bb4:0.5', 'C5 G4 Ab4:0.5 Bb4:0.5', 'C5 G4 Ab4:0.5 Bb4:0.5', 'C5:3');
+    })(),
+    accomp: (() => {
+      const held = ch => [`${ch}:3`, 'r:3'];
+      const hq = ch => `${ch}:2 ${ch}`;
+      const h8 = ch => `${ch}:2 ${ch}:0.5 ${ch}:0.5`;
+      const c = 'C2+G2', g = 'G2+D3', bb = 'Bb1+F2', f = 'F2+C3', ab = 'Ab2+Eb3', eb = 'Eb2+Bb2';
+      const arpC = 'C2:0.5 G2:0.5 C3:0.5 Eb3:0.5 G3', arpG = 'G2:0.5 D3:0.5 G3:0.5 D3:0.5 G3:0.5 D3:0.5';
+      const arpBb = 'Bb2:0.5 F3:0.5 Bb3:0.5 F3:0.5 Bb3:0.5 F3:0.5', arpC2 = 'C2:0.5 G2:0.5 C3:0.5 G2:0.5 C3:0.5 G2:0.5';
+      return bars(...held(c), ...held(c), ...held(c), ...held(c),
+        ...held(c), ...held(c), ...held(g), ...held(g), ...held(bb), ...held(bb), ...held(f), `${f}:3`, hq(f),
+        hq(c), hq(c), hq(c), hq(c), hq(g), hq(g), hq(g), hq(g), hq(bb), hq(bb), hq(bb), hq(bb), hq(c), hq(c), hq(c), hq(c),
+        arpC, arpC, arpC, arpC, arpG, arpG, arpG, arpG, arpBb, arpBb, arpBb, arpBb,
+        arpC2, arpC2, arpC2, `${c} ${c} ${c}`,
+        hq(ab), hq(ab), hq(eb), hq(eb), hq(f), hq(f), hq(c), hq(c),
+        hq(ab), hq(ab), `${ab} ${ab} ${ab}`, `${g} ${g} ${g}`,
+        hq(c), hq(c), hq(c), hq(c),
+        h8(ab), h8(ab), h8(eb), h8(eb), h8(f), h8(f), h8(c), h8(c),
+        h8(ab), h8(ab), `${ab} ${ab} ${ab}`, `${g} ${g} ${g}`,
+        h8(c), h8(c), h8(c), h8(c),
+        'C2:3', 'r:3', 'r:3', 'r:3');
+    })(),
+  },
+  {
     // Transcribed from Mohsen Karbassi's piano arrangement. `notes` is the right hand (one tile per note),
     // `accomp` is the left hand, played in time after each tap. Added with the permission of the composer
     // (Ali Molaei) and the arranger, obtained by the repository owner. 6/8, one beat = one eighth.

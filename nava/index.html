@@ -41,7 +41,7 @@
       <p class="tag">بلوک‌های موسیقی · کاشی‌ها را بزن، آهنگ را بساز</p>
     </header>
     <nav class="tabs">
-      <button class="tab" data-tab="classic">کلاسیک</button>
+      <button class="tab" data-tab="classic">جهانی</button>
       <button class="tab" data-tab="iranian">ایرانی</button>
       <button class="tab" data-tab="mine">آهنگ‌های من</button>
     </nav>
@@ -83,8 +83,11 @@
       <button data-inst="santur">سنتور</button>
       <button data-inst="piano">پیانو</button>
     </div>
-    <label>نُت‌ها
-      <textarea id="edNotes" rows="6" dir="ltr" spellcheck="false" placeholder="D4 Ek4 F4 G4:2 | A4 G4 F4 Ek4 D4:2"></textarea>
+    <label>ملودی (دست راست؛ هر نُت یک کاشی)
+      <textarea id="edNotes" rows="5" dir="ltr" spellcheck="false" placeholder="D4 Ek4 F4 G4:2 | A4 G4 F4 Ek4 D4:2"></textarea>
+    </label>
+    <label>همراهی (دست چپ؛ اختیاری، خودکار نواخته می‌شود)
+      <textarea id="edAccomp" rows="4" dir="ltr" spellcheck="false" placeholder="D3+A3:3 r:1 | A2 D3 A3 F3 D3 A2"></textarea>
     </label>
     <details class="guide">
       <summary>راهنمای نُت‌نویسی</summary>
@@ -94,6 +97,7 @@
         <li>طول نُت بعد از دونقطه: <code>G4:2</code> (دو برابر) · <code>E4:0.5</code> یا <code>E4:1/2</code> (نصف)</li>
         <li>آکورد با <code>+</code>: <code>A4+D3</code> · سکوت: <code>r:1</code> · خط میزان <code>|</code> اختیاری است</li>
         <li>دستگاه شور روی ر: <code>D4 Ek4 F4 G4 A4 Bb4 C5</code></li>
+        <li>همراهی روی همان خط زمانی ملودی نوشته می‌شود و طول هر میزانش باید با ملودی برابر باشد. هر جا دست چپ ساکت است، <code>r</code> بگذار.</li>
         <li>فقط آهنگ‌هایی را بنویس که آزادند: ترانه‌های محلی قدیمی، ساخته‌ی خودت، یا قطعه‌هایی که حق نشرشان تمام شده.</li>
       </ul>
     </details>

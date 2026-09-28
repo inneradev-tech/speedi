@@ -106,7 +106,10 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .stars span, .big-stars span { color: rgba(255, 255, 255, .2); }
 .stars span.on, .big-stars span.on { color: var(--gold); }
 .stars { font-size: 13px; letter-spacing: 1px; }
-.song .del { position: absolute; top: -6px; left: -6px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: #3a1c26; color: var(--rose); font-size: 16px; line-height: 1; border: 1px solid var(--line); }
+.song .acts { display: flex; gap: 8px; margin-top: 6px; }
+.song .edit, .song .del { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; line-height: 1; border: 1px solid var(--line); }
+.song .edit { background: #1c2c3a; color: var(--turq); }
+.song .del { background: #3a1c26; color: var(--rose); font-size: 18px; }
 .empty { opacity: .7; font-size: 13px; line-height: 2; padding: 18px 8px; }
 
 .cta {

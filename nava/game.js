@@ -183,7 +183,7 @@ const ui = {
   over: $('over'), overTitle: $('overTitle'), overScore: $('overScore'), overStars: $('overStars'), overBest: $('overBest'), newBest: $('newBest'),
   btnRetry: $('btnRetry'), btnSongs: $('btnSongs'),
   loading: $('loading'), loadBar: $('loadBar'),
-  editor: $('editor'), edTitle: $('edTitle'), edNotes: $('edNotes'), edSpeed: $('edSpeed'), edErr: $('edErr'),
+  editor: $('editor'), edTitle: $('edTitle'), edNotes: $('edNotes'), edAccomp: $('edAccomp'), edSpeed: $('edSpeed'), edErr: $('edErr'),
   edInst: document.querySelectorAll('[data-inst]'), btnPreview: $('btnPreview'), btnSave: $('btnSave'), btnCancel: $('btnCancel'),
 };
 const show = (el, on) => { el.hidden = !on; };
@@ -210,14 +210,16 @@ function renderList() {
     return `<button class="song ${s.inst}" data-id="${esc(s.id)}">
       <span class="ic">${ICONS[s.inst] || ICONS.piano}</span>
       <span class="meta"><b>${esc(s.title)}</b><small>${esc(s.by || (s.inst === 'santur' ? 'سنتور' : 'پیانو'))} ${lvl}</small></span>
-      <span class="res"><span class="stars">${starsHtml(b.stars)}</span><small>${b.score ? faNum(b.score) : ''}</small></span>
-      ${s.cat === 'mine' ? `<span class="del" data-del="${esc(s.id)}" aria-label="حذف">×</span>` : ''}
+      <span class="res"><span class="stars">${starsHtml(b.stars)}</span><small>${b.score ? faNum(b.score) : ''}</small>
+        ${s.cat === 'mine' ? `<span class="acts"><span class="edit" data-edit="${esc(s.id)}" aria-label="ویرایش">✎</span><span class="del" data-del="${esc(s.id)}" aria-label="حذف">×</span></span>` : ''}</span>
     </button>`;
   }).join('');
 }
 
 ui.tabs.forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; store.set('nava.tab', tab); renderList(); }));
 ui.list.addEventListener('click', e => {
+  const ed = e.target.closest('[data-edit]');
+  if (ed) { e.stopPropagation(); openEditor(mine.find(m => m.id === ed.dataset.edit)); return; }
   const del = e.target.closest('[data-del]');
   if (del) {
     e.stopPropagation();
@@ -369,51 +371,81 @@ window.addEventListener('keydown', e => {
 });
 
 // ---------------------------------------------------------------- editor (my songs)
-let edInst = 'santur', previewTimer = null;
-function openEditor() {
-  ui.edTitle.value = ''; ui.edNotes.value = ''; ui.edSpeed.value = 3; ui.edErr.textContent = '';
-  setInst('santur');
+let edInst = 'santur', previewTimer = null, editingId = null;
+function openEditor(s) {
+  editingId = s ? s.id : null;
+  ui.edTitle.value = s ? s.title : '';
+  ui.edNotes.value = s ? s.notes : '';
+  ui.edAccomp.value = s ? s.accomp || '' : '';
+  ui.edSpeed.value = s ? s.speed : 3;
+  ui.edErr.textContent = '';
+  setInst(s ? s.inst : 'santur');
   show(ui.editor, true);
 }
 function setInst(i) { edInst = i; ui.edInst.forEach(b => b.classList.toggle('on', b.dataset.inst === i)); }
 ui.edInst.forEach(b => b.addEventListener('click', () => setInst(b.dataset.inst)));
-ui.addBtn.addEventListener('click', openEditor);
+ui.addBtn.addEventListener('click', () => openEditor(null));
 ui.btnCancel.addEventListener('click', () => { stopPreview(); show(ui.editor, false); });
 
+const totalBeats = ev => ev.reduce((a, e) => a + e.dur, 0);
+const fmtBeats = b => (Math.round(b * 100) / 100).toLocaleString('fa-IR');
+// Returns { mel, acc } or null (and shows the problem) when either line cannot be used.
 function validate() {
   const p = parseSong(ui.edNotes.value);
   if (p.error !== undefined) {
-    ui.edErr.textContent = p.error ? `این بخش را نفهمیدم: «${p.error}»` : 'دست‌کم یک نُت بنویس.';
+    ui.edErr.textContent = p.error ? `ملودی: این بخش را نفهمیدم «${p.error}»` : 'دست‌کم یک نُت ملودی بنویس.';
     return null;
   }
+  let acc = null;
+  if (ui.edAccomp.value.trim()) {
+    const a = parseSong(ui.edAccomp.value);
+    if (a.error !== undefined) {
+      ui.edErr.textContent = a.error ? `همراهی: این بخش را نفهمیدم «${a.error}»` : 'همراهی فقط سکوت دارد.';
+      return null;
+    }
+    const tm = totalBeats(p.events), ta = totalBeats(a.events);
+    if (Math.abs(tm - ta) > 1e-6) {
+      ui.edErr.textContent = `طول همراهی (${fmtBeats(ta)} ضرب) با ملودی (${fmtBeats(tm)} ضرب) برابر نیست.`;
+      return null;
+    }
+    acc = a.events;
+  }
   ui.edErr.textContent = '';
-  return p.events;
+  return { mel: p.events, acc };
 }
-function stopPreview() { clearTimeout(previewTimer); previewTimer = null; ui.btnPreview.textContent = 'شنیدن'; }
+function stopPreview() {
+  clearTimeout(previewTimer); previewTimer = null;
+  Sound.cancelPending();
+  ui.btnPreview.textContent = 'شنیدن';
+}
+// Plays both lines on their shared timeline at the tempo the speed slider implies.
 ui.btnPreview.addEventListener('click', async () => {
   if (previewTimer) { stopPreview(); return; }
-  const ev = validate();
-  if (!ev) return;
+  const v = validate();
+  if (!v) return;
   Sound.init();
   ui.btnPreview.textContent = '…';
-  await Sound.preload(edInst, ev.flatMap(e => e.notes || []));
-  const u = Math.min(...ev.map(e => e.dur));
-  const secPerUnit = 1 / (+ui.edSpeed.value || 3);
-  let i = 0;
+  await Sound.preload(edInst, v.mel.concat(v.acc || []).flatMap(e => e.notes || []));
+  const u = Math.min(...v.mel.filter(e => !e.rest).map(e => e.dur));
+  const secPerBeat = 1 / (+ui.edSpeed.value || 3) / u;
+  const schedule = (evs, vel) => { let at = 0; for (const e of evs) { if (!e.rest) Sound.playAt(edInst, e.notes, vel, at * secPerBeat); at += e.dur; } return at; };
+  const len = schedule(v.mel, 0.95);
+  if (v.acc) schedule(v.acc, ACC_VEL);
   ui.btnPreview.textContent = 'توقف';
-  const step = () => {
-    if (i >= ev.length) { stopPreview(); return; }
-    const e = ev[i++];
-    if (!e.rest) Sound.play(edInst, e.notes);
-    previewTimer = setTimeout(step, (e.dur / u) * secPerUnit * 1000);
-  };
-  step();
+  previewTimer = setTimeout(stopPreview, len * secPerBeat * 1000 + 300);
 });
 ui.btnSave.addEventListener('click', () => {
-  const ev = validate();
-  if (!ev) return;
+  const v = validate();
+  if (!v) return;
   const title = ui.edTitle.value.trim() || 'آهنگ من';
-  mine.push({ id: 'u' + Date.now(), title, inst: edInst, speed: clamp(+ui.edSpeed.value || 3, 1.5, 6), notes: ui.edNotes.value.trim(), by: edInst === 'santur' ? 'سنتور · ساخته‌ی شما' : 'پیانو · ساخته‌ی شما' });
+  const data = {
+    title, inst: edInst, speed: clamp(+ui.edSpeed.value || 3, 1.5, 6),
+    notes: ui.edNotes.value.trim(), accomp: ui.edAccomp.value.trim() || undefined,
+    by: edInst === 'santur' ? 'سنتور · ساخته‌ی شما' : 'پیانو · ساخته‌ی شما',
+  };
+  const existing = mine.find(m => m.id === editingId);
+  if (existing) Object.assign(existing, data);
+  else mine.push({ id: 'u' + Date.now(), ...data });
   store.set('nava.mine', mine);
   stopPreview();
   show(ui.editor, false);
