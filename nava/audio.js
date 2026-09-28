@@ -229,6 +229,7 @@ const Sound = (() => {
   // (a few per frame so the UI never freezes).
   function preload(inst, midis, onProgress) {
     if (!ctx) return Promise.resolve();
+    ['tom', 'bak', 'riz'].forEach(drumBuf);
     if (inst === 'piano') return loadPiano(onProgress);
     const todo = [...new Set(midis.map(m => key(inst, m)))].filter(k => !cache.has(k)).map(k => +k.split(':')[1]);
     let done = 0;
@@ -257,8 +258,72 @@ const Sound = (() => {
     for (const v of voices) { v.g.gain.cancelScheduledValues(t); v.g.gain.setTargetAtTime(0, t, fade); try { v.stop(t + fade * 6); } catch (e) {} }
   }
 
-  // Accompaniment notes scheduled ahead of time; cancelPending() drops whatever has not started yet.
+  // ---- tonbak: tom (deep centre stroke), bak (sharp edge stroke) and riz (soft finger-roll stroke),
+  // each rendered in a few slightly different takes so repeated strokes never sound identical.
   let pending = [];
+  const drums = {};
+  function renderDrum(kind) {
+    const sr = ctx.sampleRate;
+    const len = kind === 'tom' ? 0.7 : 0.28, n = Math.floor(sr * len);
+    const out = new Float32Array(n);
+    const r = () => 0.93 + Math.random() * 0.14;
+    if (kind === 'tom') {
+      const base = 92 * r(), drop = 90 * r();
+      let ph = 0, ph2 = 0, lp = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr, f = base + drop * Math.exp(-t / 0.022);
+        ph += 6.283 * f / sr; ph2 += 6.283 * f * 1.58 / sr;
+        lp += (Math.random() * 2 - 1 - lp) * 0.08;
+        out[i] = Math.sin(ph) * Math.exp(-t / 0.24) + 0.28 * Math.sin(ph2) * Math.exp(-t / 0.07) + lp * 0.9 * Math.exp(-t / 0.018);
+      }
+    } else {
+      const soft = kind === 'riz';
+      const fc = (soft ? 2300 : 3300) * r(), q = soft ? 1.6 : 2.4;
+      // resonant band-pass (state variable filter) over noise for the skin's crack
+      const F = 2 * Math.sin(Math.PI * fc / sr);
+      let low = 0, band = 0;
+      const f1 = 700 * r(), f2 = 1150 * r();
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const x = Math.random() * 2 - 1;
+        low += F * band; const high = x - low - band / q; band += F * high;
+        out[i] = band * 0.6 * Math.exp(-t / (soft ? 0.02 : 0.028))
+          + 0.5 * Math.sin(6.283 * f1 * t) * Math.exp(-t / (soft ? 0.03 : 0.055))
+          + 0.25 * Math.sin(6.283 * f2 * t) * Math.exp(-t / 0.035);
+      }
+      for (let i = 0; i < 40 && i < n; i++) out[i] += (1 - i / 40) * (soft ? 0.2 : 0.5);
+    }
+    const an = Math.floor(sr * 0.0008);
+    for (let i = 0; i < an; i++) out[i] *= i / an;
+    const rn = Math.floor(sr * 0.03);
+    for (let i = 0; i < rn; i++) out[n - 1 - i] *= i / rn;
+    let peak = 0;
+    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[i]));
+    const g = { tom: 0.8, bak: 0.5, riz: 0.3 }[kind] / (peak || 1);
+    const buf = ctx.createBuffer(1, n, sr), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = out[i] * g;
+    return buf;
+  }
+  function drumBuf(kind) {
+    if (!drums[kind]) drums[kind] = [0, 1, 2].map(() => renderDrum(kind));
+    const v = drums[kind];
+    return v[(Math.random() * v.length) | 0];
+  }
+  function drum(kind, vel, delay) {
+    if (!ctx) return;
+    const t = ctx.currentTime + Math.max(0, delay);
+    const src = ctx.createBufferSource();
+    src.buffer = drumBuf(kind);
+    const g = ctx.createGain();
+    g.gain.value = vel * (0.9 + Math.random() * 0.15);
+    const send = ctx.createGain(); send.gain.value = 0.35;
+    src.connect(g); g.connect(dry); g.connect(send); send.connect(verbIn);
+    src.start(t);
+    src.g = g;
+    pending.push({ src, t });
+  }
+
+  // Accompaniment notes scheduled ahead of time; cancelPending() drops whatever has not started yet.
   function playAt(inst, midis, vel, delay) {
     if (!ctx) return;
     const t = ctx.currentTime + Math.max(0, delay);
@@ -301,7 +366,7 @@ const Sound = (() => {
   }
 
   return {
-    init, resume, suspend, preload, play, release, playAt, cancelPending, fail, chime, toggle,
+    init, resume, suspend, preload, play, release, playAt, drum, cancelPending, fail, chime, toggle,
     get ready() { return !!ctx; },
     get enabled() { return enabled; },
   };

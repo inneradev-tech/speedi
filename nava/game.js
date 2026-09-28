@@ -123,7 +123,7 @@ let best = store.get('nava.best', {});
 let mine = store.get('nava.mine', []);
 
 const allSongs = () => SONGS.concat(mine.map(s => ({ ...s, cat: 'mine' })));
-const ACC_VEL = 0.42;
+const ACC_VEL = 0.42, TONBAK_VEL = 0.55;
 const speedNow = () => baseSpeed * speedMul * (1 + Math.min(0.6, hits * 0.0035)); // rows per second
 
 // Rhythm model: one row = `rowBeat` beats, and tiles are spaced by the real length of each note, so
@@ -136,15 +136,66 @@ const tileRows = dur => clamp(dur / rowBeat, 0.5, 3);
 // The accompaniment follows a song clock (in beats). Each tap sets the clock to that note's time;
 // between taps it runs at the song's tempo and waits at the next untapped note, so the left hand keeps
 // steady time when the player does and never runs ahead of them.
-let accList = [], accPtr = 0, accLap = 0, clockT = 0, clockOn = false;
-function buildTiming(acc) {
+// The tonbak rides the same clock, so it keeps time with the player too.
+let accList = [], accPtr = 0, accLap = 0, clockT = 0, clockOn = false, hasAcc = false;
+function buildTiming(acc, meter) {
   let t0 = 0;
   for (const e of events) { e.t0 = t0; t0 += e.dur; }
   songLen = t0;
   accList = [];
   if (acc) { let at = 0; for (const a of acc) { if (!a.rest) accList.push({ at, notes: a.notes }); at += a.dur; } }
+  hasAcc = accList.length > 0;
+  if (meter) accList.push(...tonbakPart(meter));
+  accList.sort((a, b) => a.at - b.at);
   accPtr = 0; accLap = 0; clockT = 0; clockOn = false;
 }
+
+// ---- tonbak
+// Meter = the most common bar length (in beats) between the song's bar lines; a shorter or longer first
+// bar is a pickup. Songs can also set `meter: n` (and `pickup`) themselves.
+function detectMeter(s) {
+  if (s.meter) return { len: s.meter, offset: s.pickup ? s.meter - s.pickup : 0 };
+  const bars = s.notes.split('|').map(seg => { const p = parseSong(seg); return p.events ? totalBeats(p.events) : 0; }).filter(b => b > 0);
+  if (bars.length < 3) return { len: 4, offset: 0 };
+  const count = {};
+  for (const b of bars.slice(1, -1)) count[b] = (count[b] || 0) + 1;
+  const len = +Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+  if (!(len >= 2 && len <= 12)) return { len: 4, offset: 0 };
+  const pick = +(bars[0] % len).toFixed(3);
+  return { len, offset: pick ? len - pick : 0 };
+}
+// strokes per bar: [beat, stroke, velocity]
+const TONBAK = {
+  2: [[0, 'tom', 1], [1, 'bak', 0.6]],
+  3: [[0, 'tom', 1], [1, 'bak', 0.55], [2, 'bak', 0.62]],
+  4: [[0, 'tom', 1], [1, 'bak', 0.6], [2, 'tom', 0.78], [2.5, 'bak', 0.35], [3, 'bak', 0.62]],
+  6: [[0, 'tom', 1], [2, 'bak', 0.55], [3, 'tom', 0.75], [4, 'bak', 0.45], [5, 'bak', 0.6]],
+};
+function barPattern(n) {
+  if (TONBAK[n]) return TONBAK[n];
+  const p = [[0, 'tom', 1]];
+  for (let k = 1; k < n; k++) p.push([k, n % 2 === 0 && k === n / 2 ? 'tom' : 'bak', n % 2 === 0 && k === n / 2 ? 0.75 : 0.5]);
+  return p;
+}
+function tonbakPart({ len, offset }) {
+  const out = [], pat = barPattern(len);
+  // riz: a quick finger roll fills the last beat of every fourth bar, leading into the next downbeat
+  const sub = baseSpeed > 3.5 ? 2 : 4;
+  for (let bar = 0, start = -offset; start < songLen - 1e-9; bar++, start += len) {
+    const fill = bar % 4 === 3;
+    for (const [b, kind, vel] of pat) {
+      if (fill && b >= len - 1) continue;
+      const at = start + b;
+      if (at >= -1e-9 && at < songLen - 1e-9) out.push({ at, drum: kind, vel });
+    }
+    if (fill) for (let i = 0; i < sub; i++) {
+      const at = start + len - 1 + i / sub;
+      if (at >= 0 && at < songLen - 1e-9) out.push({ at, drum: 'riz', vel: 0.35 + 0.5 * (i / sub) });
+    }
+  }
+  return out;
+}
+let tonbakOn = store.get('nava.tonbak', true);
 const tileTime = tl => tl.ev.t0 + (tl.lap - 1) * songLen;
 const accAt = () => accList[accPtr].at + accLap * songLen;
 function accNext() { if (++accPtr >= accList.length) { accPtr = 0; accLap++; } }
@@ -157,7 +208,9 @@ function runClock(dt) {
   // schedule a little ahead for sample-accurate timing, but never past the note the player owes us
   const horizon = Math.min(target + 0.15 * bps, limit);
   while (accAt() < horizon - 1e-9) {
-    Sound.playAt(inst, accList[accPtr].notes, ACC_VEL, (accAt() - clockT) / bps);
+    const a = accList[accPtr], delay = (accAt() - clockT) / bps;
+    if (a.drum) Sound.drum(a.drum, a.vel * TONBAK_VEL, delay);
+    else Sound.playAt(inst, a.notes, ACC_VEL, delay);
     accNext();
   }
   clockT = target;
@@ -262,13 +315,20 @@ function renderTop() {
   ui.daily.className = 'daily' + (d.done ? ' done' : '');
   ui.daily.innerHTML = `<span class="k">🎯 چالش امروز</span><b>${esc(s.title)}</b><small>${goalText(d.goal)}${d.done ? '' : ' · جایزه: ۱★'}</small>
     <span class="s">${d.done ? '✓' : d.streak && d.last === dayKey(new Date(Date.now() - 864e5)) ? `🔥<br>${faNum(d.streak)} روز` : ''}</span>`;
-  ui.instPick.innerHTML = [['auto', 'ساز آهنگ']].concat(Object.entries(INSTS).map(([k, v]) => [k, v.name])).map(([k, name]) => {
+  ui.instPick.innerHTML = `<button data-tonbak class="tonbak${tonbakOn ? ' on' : ''}" aria-pressed="${tonbakOn}">🥁 تنبک</button><span class="sep"></span>` + [['auto', 'ساز آهنگ']].concat(Object.entries(INSTS).map(([k, v]) => [k, v.name])).map(([k, name]) => {
     const locked = k !== 'auto' && !instOpen(k);
     return `<button data-pick="${k}" class="${instPick === k ? 'on' : ''}${locked ? ' locked' : ''}">${locked ? `🔒 ${name} ${faNum(INSTS[k].unlock)}★` : name}</button>`;
   }).join('');
 }
 ui.daily.addEventListener('click', () => startSong(SONGS.find(x => x.id === dailyToday().song)));
 ui.instPick.addEventListener('click', e => {
+  if (e.target.closest('[data-tonbak]')) {
+    tonbakOn = !tonbakOn; store.set('nava.tonbak', tonbakOn);
+    if (tonbakOn) { Sound.init(); Sound.drum('tom', 0.6, 0); Sound.drum('bak', 0.45, 0.22); Sound.drum('bak', 0.5, 0.33); }
+    toast(tonbakOn ? 'تنبک همراه روشن شد' : 'تنبک همراه خاموش شد');
+    renderTop();
+    return;
+  }
   const b = e.target.closest('[data-pick]');
   if (!b) return;
   const k = b.dataset.pick;
@@ -373,7 +433,8 @@ async function startSong(s) {
   events = parsed.events;
   rowBeat = s.rowBeat || 1;
   const acc = s.accomp ? parseSong(s.accomp).events : null;
-  buildTiming(acc);
+  baseSpeed = (s.speed || 3) * (H > W ? 1 : 0.95);
+  buildTiming(acc, tonbakOn ? detectMeter(s) : null);
   inst = instPick !== 'auto' && instOpen(instPick) ? instPick : s.inst;
   theme = inst === 'piano' ? THEMES.classic : THEMES.iranian;
   buildBg();
@@ -387,7 +448,6 @@ async function startSong(s) {
   tiles = []; nextIdx = 0; genRow = 0; genEvent = 0; genLap = 1; lastCol = -1;
   pos = 0; score = 0; hits = 0; hold = null; floats = [];
   streak = 0; maxStreak = 0; judged = { perfect: 0, great: 0, ok: 0 }; flash = 0; lap = 1; speedMul = 1; fail = null; ripples = [];
-  baseSpeed = (s.speed || 3) * (H > W ? 1 : 0.95);
   genTiles(12);
   firstLapTiles = events.filter(e => !e.rest).length;
   hudScore = -1; hudProg = -1; hudStreak = -1;
@@ -517,7 +577,7 @@ function hit(tl, x, y, id) {
   if (j !== 'ok' && mode !== 'ready') floats.push({ x, y: y - B.rowH * 0.35, t: 0, text: JUDGE_TEXT[j], j });
   if (tl.lap > lap) { lap = tl.lap; speedMul = Math.pow(1.14, lap - 1); Sound.chime(inst, [tl.notes[0] + 12]); }
   if (accList.length) syncClock(tileTime(tl));
-  const voices = Sound.play(inst, tl.notes, 0.95, accList.length ? 0.8 : 0.62);
+  const voices = Sound.play(inst, tl.notes, 0.95, hasAcc ? 0.8 : 0.62);
   if (isLong(tl)) {
     // rows between the tile's bottom and the touch point: the fill starts there, under the finger
     const off = clamp((tileBottom(tl) - y) / B.rowH, 0, tl.h);
