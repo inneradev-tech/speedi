@@ -107,9 +107,52 @@ const Sound = (() => {
     return b;
   }
 
-  // Render all pitches a song needs, a few per frame, so the UI never freezes.
+  // ---- recorded piano: 21 samples (every minor third, C2–C7); other pitches, quarter tones included,
+  // are played by resampling the nearest one. Falls back to the synthesised piano if loading fails.
+  const PIANO_SAMPLES = [];
+  for (let o = 2; o <= 6; o++) for (const [n, s] of [['C', 0], ['Ds', 3], ['Fs', 6], ['A', 9]]) PIANO_SAMPLES.push([n + o, 12 * (o + 1) + s]);
+  PIANO_SAMPLES.push(['C7', 96]);
+  let piano = null, pianoLoad = null;
+  function loadPiano(onProgress) {
+    if (piano) return Promise.resolve();
+    if (pianoLoad) return pianoLoad;
+    let done = 0;
+    const decode = ab => new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej));
+    pianoLoad = Promise.all(PIANO_SAMPLES.map(([name, midi]) =>
+      fetch(`piano/${name}.mp3`).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+        .then(decode)
+        .then(buffer => { done++; if (onProgress) onProgress(done / PIANO_SAMPLES.length); return { midi, buffer }; })))
+      .then(list => { piano = list; })
+      .catch(() => { pianoLoad = null; });
+    return pianoLoad;
+  }
+
+  function voice(inst, midi) {
+    if (inst === 'piano' && piano) {
+      let best = piano[0];
+      for (const s of piano) if (Math.abs(s.midi - midi) < Math.abs(best.midi - midi)) best = s;
+      return { buffer: best.buffer, rate: Math.pow(2, (midi - best.midi) / 12), gain: 1.1 };
+    }
+    return { buffer: get(inst, midi), rate: 1, gain: 1 };
+  }
+
+  function start(inst, midi, vel, when) {
+    const v = voice(inst, midi);
+    const src = ctx.createBufferSource();
+    src.buffer = v.buffer;
+    src.playbackRate.value = v.rate;
+    const g = ctx.createGain();
+    g.gain.value = vel * v.gain;
+    src.connect(g); g.connect(dry); g.connect(verbIn);
+    src.start(when);
+    return src;
+  }
+
+  // Get everything a song needs ready: the piano samples, or the rendered santur notes
+  // (a few per frame so the UI never freezes).
   function preload(inst, midis, onProgress) {
     if (!ctx) return Promise.resolve();
+    if (inst === 'piano') return loadPiano(onProgress);
     const todo = [...new Set(midis.map(m => key(inst, m)))].filter(k => !cache.has(k)).map(k => +k.split(':')[1]);
     let done = 0;
     return new Promise(res => {
@@ -126,30 +169,18 @@ const Sound = (() => {
   function play(inst, midis, vel = 1, restVel = 0.62) {
     if (!ctx) return;
     const t = ctx.currentTime;
-    midis.forEach((m, i) => {
-      const src = ctx.createBufferSource();
-      src.buffer = get(inst, m);
-      const g = ctx.createGain();
-      g.gain.value = vel * (i === 0 ? 1 : restVel);
-      src.connect(g); g.connect(dry); g.connect(verbIn);
-      src.start(t + i * 0.004);
-    });
+    // a touch of human variation keeps repeated notes from sounding mechanical
+    const h = 0.92 + Math.random() * 0.1;
+    midis.forEach((m, i) => start(inst, m, vel * h * (i === 0 ? 1 : restVel), t + i * 0.006));
   }
 
-  // Accompaniment notes scheduled ahead of time; a new tap cancels whatever has not started yet.
+  // Accompaniment notes scheduled ahead of time; cancelPending() drops whatever has not started yet.
   let pending = [];
   function playAt(inst, midis, vel, delay) {
     if (!ctx) return;
     const t = ctx.currentTime + Math.max(0, delay);
-    for (const m of midis) {
-      const src = ctx.createBufferSource();
-      src.buffer = get(inst, m);
-      const g = ctx.createGain();
-      g.gain.value = vel;
-      src.connect(g); g.connect(dry); g.connect(verbIn);
-      src.start(t);
-      pending.push({ src, t });
-    }
+    for (const m of midis) pending.push({ src: start(inst, m, vel, t), t });
+    if (pending.length > 64) pending = pending.filter(p => p.t > ctx.currentTime);
   }
   function cancelPending() {
     if (!ctx) return;

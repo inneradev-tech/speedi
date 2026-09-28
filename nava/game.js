@@ -111,7 +111,7 @@ function buildBg() {
 
 // ---------------------------------------------------------------- game state
 let mode = 'menu'; // menu | loading | ready | play | fail | over | pause
-let song = null, events = [], unit = 1, firstLapTiles = 0;
+let song = null, events = [], firstLapTiles = 0;
 let tiles = [], nextIdx = 0, genRow = 0, genEvent = 0, genLap = 1, lastCol = -1;
 let pos = 0, baseSpeed = 3, speedMul = 1, score = 0, lap = 1, failT = 0, fail = null;
 let t = 0, ripples = [], menuTiles = [];
@@ -119,38 +119,51 @@ let best = store.get('nava.best', {});
 let mine = store.get('nava.mine', []);
 
 const allSongs = () => SONGS.concat(mine.map(s => ({ ...s, cat: 'mine' })));
-const rowsFor = dur => clamp(dur / unit, 1, 2);
-const restRows = dur => Math.min(2, dur / unit);
 const ACC_VEL = 0.42;
+const speedNow = () => baseSpeed * speedMul * (1 + Math.min(0.6, score * 0.0035)); // rows per second
 
-// Give each melody note its slice of the accompaniment: every accompaniment note belongs to the
-// melody note sounding when it starts, with an offset in beats. On tap those notes are scheduled
-// relative to the tap, stretched to the time the player actually has until the next tile.
+// Rhythm model: one row = `rowBeat` beats, and tiles are spaced by the real length of each note, so
+// tapping tiles as they arrive reproduces the song's rhythm. Tile height is capped so long notes stay
+// tappable without filling the screen.
+let rowBeat = 1, songLen = 0;
+const rows = dur => dur / rowBeat;
+const tileRows = dur => clamp(dur / rowBeat, 0.5, 3);
+
+// The accompaniment follows a song clock (in beats). Each tap sets the clock to that note's time;
+// between taps it runs at the song's tempo and waits at the next untapped note, so the left hand keeps
+// steady time when the player does and never runs ahead of them.
+let accList = [], accPtr = 0, accLap = 0, clockT = 0, clockOn = false;
 function buildTiming(acc) {
   let t0 = 0;
   for (const e of events) { e.t0 = t0; t0 += e.dur; }
-  const total = t0;
-  const notes = events.filter(e => !e.rest);
-  notes.forEach((e, i) => {
-    const next = notes[i + 1];
-    e.beats = (next ? next.t0 : total + notes[0].t0) - e.t0;
-    let rows = rowsFor(e.dur);
-    for (let j = events.indexOf(e) + 1; j < events.length && events[j].rest; j++) rows += restRows(events[j].dur);
-    e.rows = rows;
-    e.acc = [];
-  });
-  if (!acc) return;
-  let at = 0, k = 0;
-  for (const a of acc) {
-    if (!a.rest) {
-      while (k + 1 < notes.length && notes[k + 1].t0 <= at + 1e-9) k++;
-      const owner = notes[k];
-      owner.acc.push({ off: Math.max(0, at - owner.t0), notes: a.notes });
-    }
-    at += a.dur;
-  }
+  songLen = t0;
+  accList = [];
+  if (acc) { let at = 0; for (const a of acc) { if (!a.rest) accList.push({ at, notes: a.notes }); at += a.dur; } }
+  accPtr = 0; accLap = 0; clockT = 0; clockOn = false;
 }
-const speedNow = () => baseSpeed * speedMul * (1 + Math.min(0.6, score * 0.0035));
+const tileTime = tl => tl.ev.t0 + (tl.lap - 1) * songLen;
+const accAt = () => accList[accPtr].at + accLap * songLen;
+function accNext() { if (++accPtr >= accList.length) { accPtr = 0; accLap++; } }
+function runClock(dt) {
+  if (!clockOn || !accList.length) return;
+  const bps = speedNow() * rowBeat;
+  const nt = nextTile();
+  const limit = nt ? tileTime(nt) : Infinity;
+  const target = Math.min(clockT + dt * bps, limit);
+  // schedule a little ahead for sample-accurate timing, but never past the note the player owes us
+  const horizon = Math.min(target + 0.15 * bps, limit);
+  while (accAt() < horizon - 1e-9) {
+    Sound.playAt(song.inst, accList[accPtr].notes, ACC_VEL, (accAt() - clockT) / bps);
+    accNext();
+  }
+  clockT = target;
+}
+function syncClock(T) {
+  // the player moved on: drop what was queued for later and jump to the tapped note
+  Sound.cancelPending();
+  while (accAt() < T - 1e-9) accNext();
+  clockT = T; clockOn = true;
+}
 
 function genTiles(untilRow) {
   while (genRow < untilRow) {
@@ -160,13 +173,12 @@ function genTiles(untilRow) {
       genRow += 0.6;
     }
     const e = events[genEvent++];
-    if (e.rest) { genRow += restRows(e.dur); continue; }
+    if (e.rest) { genRow += rows(e.dur); continue; }
     let col;
     do { col = (Math.random() * COLS) | 0; } while (col === lastCol);
     lastCol = col;
-    const h = rowsFor(e.dur);
-    tiles.push({ col, b: genRow, h, notes: e.notes, ev: e, tapped: false, tt: 0, lap: genLap });
-    genRow += h;
+    tiles.push({ col, b: genRow, h: tileRows(e.dur), notes: e.notes, ev: e, tapped: false, tt: 0, lap: genLap });
+    genRow += rows(e.dur);
   }
 }
 
@@ -249,7 +261,7 @@ async function startSong(s) {
   const parsed = parseSong(s.notes);
   if (parsed.error !== undefined) return;
   events = parsed.events;
-  unit = Math.min(...events.filter(e => !e.rest).map(e => e.dur));
+  rowBeat = s.rowBeat || 1;
   const acc = s.accomp ? parseSong(s.accomp).events : null;
   buildTiming(acc);
   theme = s.inst === 'santur' ? THEMES.iranian : THEMES.classic;
@@ -296,6 +308,7 @@ function triggerFail(kind, tile, x, y) {
   fail = { kind, tile, x, y, fromPos: pos, toPos: pos };
   // scroll back so the missed tile sits just above the bottom edge
   if (kind === 'miss') fail.toPos = tile.b + START_ROW - 0.3;
+  clockOn = false;
   Sound.fail();
   if (navigator.vibrate) navigator.vibrate([50, 40, 80]);
 }
@@ -345,15 +358,12 @@ function hit(tl, x, y) {
   tl.tapped = true; tl.tt = 0;
   score++;
   if (tl.lap > lap) { lap = tl.lap; speedMul = Math.pow(1.14, lap - 1); Sound.chime(song.inst, [tl.notes[0] + 12]); }
-  Sound.cancelPending();
-  Sound.play(song.inst, tl.notes, 0.95, tl.ev.acc.length ? 0.8 : 0.62);
-  if (tl.ev.acc.length) {
-    const secPerBeat = (tl.ev.rows / speedNow()) / tl.ev.beats;
-    for (const a of tl.ev.acc) Sound.playAt(song.inst, a.notes, ACC_VEL, a.off * secPerBeat);
-  }
+  if (accList.length) syncClock(tileTime(tl));
+  Sound.play(song.inst, tl.notes, 0.95, accList.length ? 0.8 : 0.62);
   ripples.push({ x, y, t: 0, col: tl.col });
   if (mode === 'ready') mode = 'play';
   nextIdx++;
+  runClock(0);
 }
 
 window.addEventListener('keydown', e => {
@@ -426,8 +436,7 @@ ui.btnPreview.addEventListener('click', async () => {
   Sound.init();
   ui.btnPreview.textContent = '…';
   await Sound.preload(edInst, v.mel.concat(v.acc || []).flatMap(e => e.notes || []));
-  const u = Math.min(...v.mel.filter(e => !e.rest).map(e => e.dur));
-  const secPerBeat = 1 / (+ui.edSpeed.value || 3) / u;
+  const secPerBeat = 1 / (+ui.edSpeed.value || 3); // one beat = one row
   const schedule = (evs, vel) => { let at = 0; for (const e of evs) { if (!e.rest) Sound.playAt(edInst, e.notes, vel, at * secPerBeat); at += e.dur; } return at; };
   const len = schedule(v.mel, 0.95);
   if (v.acc) schedule(v.acc, ACC_VEL);
@@ -461,6 +470,7 @@ function update(dt) {
 
   if (mode === 'play') {
     pos += speedNow() * dt;
+    runClock(dt);
     genTiles(pos + 10);
     const tl = nextTile();
     // missed: the tile slid half-way off the bottom untapped
