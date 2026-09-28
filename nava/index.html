@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap">
-<link rel="stylesheet" href="style.css?v=202609281441">
+<link rel="stylesheet" href="style.css?v=202609281455">
 </head>
 <body>
 <canvas id="game" aria-label="بازی"></canvas>
@@ -79,6 +79,11 @@
   <div class="panel wide scroll">
     <h2>آهنگ تازه</h2>
     <label>نام آهنگ<input id="edTitle" maxlength="40" placeholder="مثلاً: ترانه‌ی محلی"></label>
+    <div class="import">
+      <label class="filebtn">🎵 تبدیل فایل به نُت (صدا یا MIDI)<input id="edFile" type="file" accept="audio/*,.mid,.midi,audio/midi"></label>
+      <label class="check"><input id="edQuarter" type="checkbox"> تشخیص کُرن و سُری (موسیقی ایرانی)</label>
+      <p id="edImport" class="hint">فایل روی همین دستگاه پردازش می‌شود و به هیچ‌جا فرستاده نمی‌شود. بهترین نتیجه: یک ساز یا صدای تنها، یا فایل MIDI.</p>
+    </div>
     <div class="seg">
       <button data-inst="santur">سنتور</button>
       <button data-inst="piano">پیانو</button>
@@ -111,8 +116,9 @@
   </div>
 </div>
 
-<script src="audio.js?v=202609281441"></script>
-<script src="songs.js?v=202609281441"></script>
-<script src="game.js?v=202609281441"></script>
+<script src="audio.js?v=202609281455"></script>
+<script src="songs.js?v=202609281455"></script>
+<script src="convert.js?v=202609281455"></script>
+<script src="game.js?v=202609281455"></script>
 </body>
 </html>

@@ -150,6 +150,15 @@ input[type=range] { display: block; width: 100%; margin-top: 8px; accent-color: 
 .guide summary { cursor: pointer; color: var(--gold); font-weight: 700; }
 .guide ul { margin: 6px 0 0; padding-inline-start: 18px; }
 .guide code { direction: ltr; unicode-bidi: isolate; padding: 1px 5px; border-radius: 5px; background: rgba(255, 255, 255, .08); font-size: 12px; }
+.import { margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1px dashed rgba(226, 185, 81, .45); background: rgba(226, 185, 81, .06); }
+.filebtn { display: block; margin: 0; padding: 10px; border-radius: 10px; text-align: center; cursor: pointer; color: #1a1204; background: linear-gradient(135deg, #ffe7a8, #e2b951); opacity: 1; }
+.filebtn input { display: none; }
+.filebtn.busy { pointer-events: none; opacity: .6; }
+.check { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-weight: 400; }
+.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--gold); }
+.hint { margin: 8px 0 0; font-size: 12px; line-height: 1.8; opacity: .75; }
+.hint.ok { color: var(--turq); opacity: 1; }
+.hint.bad { color: var(--rose); opacity: 1; }
 .err { min-height: 18px; margin: 8px 0 0; font-size: 13px; color: var(--rose); }
 .row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; align-items: end; }
 .row .cta, .row .ghost { margin-top: 8px; }

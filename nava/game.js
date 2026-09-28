@@ -196,6 +196,7 @@ const ui = {
   btnRetry: $('btnRetry'), btnSongs: $('btnSongs'),
   loading: $('loading'), loadBar: $('loadBar'),
   editor: $('editor'), edTitle: $('edTitle'), edNotes: $('edNotes'), edAccomp: $('edAccomp'), edSpeed: $('edSpeed'), edErr: $('edErr'),
+  edFile: $('edFile'), edQuarter: $('edQuarter'), edImport: $('edImport'),
   edInst: document.querySelectorAll('[data-inst]'), btnPreview: $('btnPreview'), btnSave: $('btnSave'), btnCancel: $('btnCancel'),
 };
 const show = (el, on) => { el.hidden = !on; };
@@ -389,6 +390,7 @@ function openEditor(s) {
   ui.edAccomp.value = s ? s.accomp || '' : '';
   ui.edSpeed.value = s ? s.speed : 3;
   ui.edErr.textContent = '';
+  importMsg(IMPORT_HINT);
   setInst(s ? s.inst : 'santur');
   show(ui.editor, true);
 }
@@ -443,6 +445,39 @@ ui.btnPreview.addEventListener('click', async () => {
   ui.btnPreview.textContent = 'توقف';
   previewTimer = setTimeout(stopPreview, len * secPerBeat * 1000 + 300);
 });
+// ---- file -> notes (runs locally, see convert.js)
+const IMPORT_HINT = ui.edImport.textContent;
+function importMsg(text, cls = '') { ui.edImport.textContent = text; ui.edImport.className = 'hint' + (cls ? ' ' + cls : ''); }
+ui.edFile.addEventListener('change', async () => {
+  const file = ui.edFile.files[0];
+  ui.edFile.value = '';
+  if (!file) return;
+  stopPreview();
+  const isMidi = /\.midi?$/i.test(file.name) || /midi/.test(file.type);
+  const box = ui.edFile.parentElement;
+  box.classList.add('busy');
+  const STEPS = { load: 'آماده کردن شنونده…', decode: 'خواندن فایل…', listen: 'گوش دادن و نُت‌نویسی' };
+  try {
+    const r = isMidi ? await Convert.fromMidi(file)
+      : await Convert.fromAudio(file, { quarterTones: ui.edQuarter.checked }, (st, p) =>
+        importMsg(STEPS[st] + (st === 'listen' ? ` ${faNum(Math.round(p * 100))}٪` : '')));
+    if (!ui.edTitle.value.trim()) ui.edTitle.value = file.name.replace(/\.[^.]+$/, '').slice(0, 40);
+    ui.edNotes.value = r.melody;
+    ui.edAccomp.value = r.accomp;
+    ui.edSpeed.value = r.speed;
+    ui.edErr.textContent = '';
+    importMsg(`${faNum(r.count)} نُت ملودی${r.accomp ? ' + همراهی' : ''} · تمپو حدود ${faNum(r.bpm)}` +
+      (r.cut ? ' · فقط ۲:۳۰ دقیقه‌ی اول' : '') + '. نُت‌نویسی خودکار تقریبی است؛ با «شنیدن» گوش کن و اگر لازم بود دستی درستش کن.', 'ok');
+  } catch (e) {
+    importMsg(e.message === 'decode' ? 'این فایل را نتوانستم بخوانم. mp3، wav، m4a، ogg یا MIDI امتحان کن.'
+      : e.message === 'empty' ? 'نُتی در این فایل پیدا نشد.'
+      : e.message === 'lib' ? 'بارگذاری ابزار نُت‌نویسی نشد؛ اتصال را بررسی کن و دوباره امتحان کن.'
+      : 'تبدیل ناموفق بود: ' + e.message, 'bad');
+  } finally {
+    box.classList.remove('busy');
+  }
+});
+
 ui.btnSave.addEventListener('click', () => {
   const v = validate();
   if (!v) return;
