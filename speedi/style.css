@@ -230,6 +230,18 @@ h2.crash { color: var(--pink); text-shadow: 0 0 18px rgba(255, 46, 136, .6); }
 .stats small { display: block; font-size: 11px; opacity: .65; margin-bottom: 2px; }
 .stats b { font-size: 17px; }
 
+.home {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: .6;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.home:active { opacity: 1; }
+
 @media (max-height: 460px) {
   .panel { padding: 16px 18px; }
   .logo { font-size: 40px; }

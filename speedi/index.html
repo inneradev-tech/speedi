@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0420">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Speedi — مسابقه‌ی شبانه در بزرگراه نئونی. از بین ماشین‌ها لایی بکش و رکورد بزن.">
+<title>Speedi — مسابقه‌ی شبانه</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800&family=Vazirmatn:wght@400;700;900&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" aria-label="بازی"></canvas>
+
+<button id="btnSound" class="icon-btn" aria-label="صدا">
+  <svg class="on" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
+  <svg class="off" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4zm15.6 3 2.2-2.2-1.4-1.4-2.2 2.2-2.2-2.2-1.4 1.4 2.2 2.2-2.2 2.2 1.4 1.4 2.2-2.2 2.2 2.2 1.4-1.4-2.2-2.2z"/></svg>
+</button>
+
+<div id="hud" hidden>
+  <button id="btnPause" class="icon-btn" aria-label="توقف">
+    <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+  </button>
+  <div class="scorebox"><div id="score">0</div><div id="best"></div></div>
+  <div id="speedo"><span id="speed">0</span><small>KM/H</small></div>
+  <button id="btnNitro" aria-label="نیترو">
+    <svg viewBox="0 0 68 68"><circle class="track" cx="34" cy="34" r="30"/><circle id="nitroRing" cx="34" cy="34" r="30"/></svg>
+    <span>N₂O</span>
+  </button>
+</div>
+
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1 class="logo">SPEEDI</h1>
+    <p class="tag">بزرگراه نئونی · شب · سرعت</p>
+    <button id="btnStart" class="cta">شروع</button>
+    <p class="best-line">رکورد: <b id="menuBest">۰</b></p>
+    <ul class="help">
+      <li class="touch-only"><span class="k">لمس چپ / راست</span>فرمان</li>
+      <li class="touch-only"><span class="k">کشیدن رو به بالا</span>نیترو</li>
+      <li class="kbd-only"><span class="k">← →</span>فرمان<span class="k sp">Space</span>نیترو</li>
+      <li>از کنار ماشین‌ها <b>لایی</b> بکش تا امتیاز و نیترو بگیری</li>
+    </ul>
+    <a class="home" href="../">← همه‌ی بازی‌ها</a>
+  </div>
+</div>
+
+<div id="pause" class="overlay" hidden>
+  <div class="panel">
+    <h2>توقف</h2>
+    <button id="btnResume" class="cta">ادامه</button>
+  </div>
+</div>
+
+<div id="over" class="overlay" hidden>
+  <div class="panel">
+    <h2 class="crash">تصادف!</h2>
+    <div id="finalScore" class="final">۰</div>
+    <p id="newBest" class="badge" hidden>رکورد جدید!</p>
+    <div class="stats">
+      <div><small>مسافت</small><b><span id="finalDist">۰</span> km</b></div>
+      <div><small>لایی</small><b id="finalNear">۰</b></div>
+      <div><small>رکورد</small><b id="overBest">۰</b></div>
+    </div>
+    <button id="btnRestart" class="cta">دوباره</button>
+    <a class="home" href="../">← همه‌ی بازی‌ها</a>
+  </div>
+</div>
+
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

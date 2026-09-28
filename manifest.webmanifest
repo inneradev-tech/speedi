@@ -1,13 +1,13 @@
 {
-  "name": "Speedi — مسابقه‌ی شبانه",
-  "short_name": "Speedi",
+  "name": "بازی‌خانه",
+  "short_name": "بازی‌خانه",
   "lang": "fa",
   "dir": "rtl",
-  "start_url": ".",
-  "scope": ".",
+  "start_url": "./",
+  "scope": "./",
   "display": "fullscreen",
-  "background_color": "#0b0420",
-  "theme_color": "#0b0420",
+  "background_color": "#0a0812",
+  "theme_color": "#0a0812",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
