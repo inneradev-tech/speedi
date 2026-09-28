@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d0f1c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="نوا — بلوک‌های موسیقی. کاشی‌ها را بزن و آهنگ را بساز؛ کلاسیک با پیانو و ایرانی با سنتور.">
+<title>نوا — بلوک‌های موسیقی</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" aria-label="بازی"></canvas>
+
+<button id="btnSound" class="icon-btn" aria-label="صدا">
+  <svg class="on" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
+  <svg class="off" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4zm15.6 3 2.2-2.2-1.4-1.4-2.2 2.2-2.2-2.2-1.4 1.4 2.2 2.2-2.2 2.2 1.4 1.4 2.2-2.2 2.2 2.2 1.4-1.4-2.2-2.2z"/></svg>
+</button>
+
+<div id="hud" hidden>
+  <button id="btnBack" class="icon-btn" aria-label="توقف">
+    <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+  </button>
+  <div class="top">
+    <div id="prog"><div id="progFill"></div><span class="st" style="left:33.3%">★</span><span class="st" style="left:66.6%">★</span><span class="st" style="left:100%">★</span></div>
+    <div id="score">۰</div>
+  </div>
+</div>
+
+<div id="menu" class="overlay">
+  <div class="sheet">
+    <header>
+      <h1 class="logo">نوا</h1>
+      <p class="tag">بلوک‌های موسیقی · کاشی‌ها را بزن، آهنگ را بساز</p>
+    </header>
+    <nav class="tabs">
+      <button class="tab" data-tab="classic">کلاسیک</button>
+      <button class="tab" data-tab="iranian">ایرانی</button>
+      <button class="tab" data-tab="mine">آهنگ‌های من</button>
+    </nav>
+    <div id="songList" class="scroll"></div>
+    <button id="btnAdd" class="cta" hidden>+ افزودن آهنگ</button>
+    <a class="home" href="../">← همه‌ی بازی‌ها</a>
+  </div>
+</div>
+
+<div id="loading" class="overlay" hidden>
+  <div class="panel small"><p>در حال کوک کردن ساز…</p><div class="bar"><div id="loadBar"></div></div></div>
+</div>
+
+<div id="pause" class="overlay" hidden>
+  <div class="panel">
+    <h2>توقف</h2>
+    <button id="btnResume" class="cta">ادامه</button>
+    <button id="btnQuit" class="ghost">آهنگ‌ها</button>
+  </div>
+</div>
+
+<div id="over" class="overlay" hidden>
+  <div class="panel">
+    <h2 id="overTitle">آفرین!</h2>
+    <div id="overStars" class="big-stars"></div>
+    <div id="overScore" class="final">۰</div>
+    <p id="newBest" class="badge" hidden>رکورد جدید!</p>
+    <p class="best-line">رکورد این آهنگ: <b id="overBest">۰</b></p>
+    <button id="btnRetry" class="cta">دوباره</button>
+    <button id="btnSongs" class="ghost">آهنگ‌ها</button>
+  </div>
+</div>
+
+<div id="editor" class="overlay" hidden>
+  <div class="panel wide scroll">
+    <h2>آهنگ تازه</h2>
+    <label>نام آهنگ<input id="edTitle" maxlength="40" placeholder="مثلاً: ترانه‌ی محلی"></label>
+    <div class="seg">
+      <button data-inst="santur">سنتور</button>
+      <button data-inst="piano">پیانو</button>
+    </div>
+    <label>نُت‌ها
+      <textarea id="edNotes" rows="6" dir="ltr" spellcheck="false" placeholder="D4 Ek4 F4 G4:2 | A4 G4 F4 Ek4 D4:2"></textarea>
+    </label>
+    <details class="guide">
+      <summary>راهنمای نُت‌نویسی</summary>
+      <ul>
+        <li>نُت‌ها: <code>C D E F G A B</code> (دو ر می فا سل لا سی) + شماره‌ی اکتاو، مثل <code>A4</code></li>
+        <li>دیز <code>#</code> · بمل <code>b</code> · <b>کُرن</b> <code>k</code> · <b>سُری</b> <code>s</code> — مثل <code>Ek4</code> (می کرن) یا <code>Fs4</code> (فا سری)</li>
+        <li>طول نُت بعد از دونقطه: <code>G4:2</code> (دو برابر) · <code>E4:0.5</code> یا <code>E4:1/2</code> (نصف)</li>
+        <li>آکورد با <code>+</code>: <code>A4+D3</code> · سکوت: <code>r:1</code> · خط میزان <code>|</code> اختیاری است</li>
+        <li>دستگاه شور روی ر: <code>D4 Ek4 F4 G4 A4 Bb4 C5</code></li>
+        <li>فقط آهنگ‌هایی را بنویس که آزادند: ترانه‌های محلی قدیمی، ساخته‌ی خودت، یا قطعه‌هایی که حق نشرشان تمام شده.</li>
+      </ul>
+    </details>
+    <label>سرعت <input id="edSpeed" type="range" min="1.5" max="6" step="0.1" value="3"></label>
+    <p id="edErr" class="err"></p>
+    <div class="row">
+      <button id="btnPreview" class="ghost">شنیدن</button>
+      <button id="btnSave" class="cta">ذخیره</button>
+    </div>
+    <button id="btnCancel" class="ghost">انصراف</button>
+  </div>
+</div>
+
+<script src="audio.js"></script>
+<script src="songs.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
