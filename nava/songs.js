@@ -199,6 +199,31 @@ const SONGS = [
     })(),
   },
   {
+    // Transcribed from the repository owner's piano transcription (first 16 bars, C minor, 3/4, quarter = 89).
+    // Added with the permission obtained by the repository owner. One beat = a quarter note; rowBeat 0.5 makes
+    // one row an eighth, so sixteenths stay tappable. Tied notes are merged into one tile.
+    id: 'sareban', cat: 'iranian', inst: 'piano', level: 2, speed: 2.8, rowBeat: 0.5,
+    title: 'ای ساربان', by: 'محسن نامجو · شعر سعدی · با اجازه',
+    notes: `
+      r:1/2 r:1/4 G4:1/4 G4:1/2 C4:1/2 G4:1/2 G4:1/2 | C4:3/4 G4:1/4 G4:1/2 C4:1/2 Ab4+Ab3 |
+      r:1/2 r:1/4 G4:1/4 G4:1/2 C4:1/2 G4:1/2 G4:1/2 | C4:3/4 G4:1/4 G4:1/2 C4:1/2 Ab4+Ab3 |
+      Ab4:3/4 G4:1/4 Ab4:1/2 C5:1/2 B4:1/2 Ab4:1/2 | G4:3/4 G4:1/4 G4:1/2 C4:1/2 G4 |
+      Ab4:3/4 G4:1/4 Ab4:1/2 G4:1/2 F4:1/2 Eb4:1/2 | G4:3/4 F4:1/4 G4:1/2 F4:1/2 Eb5+Eb4:1/2 D4:1/2 |
+      C4:3/4 D4:1/4 Eb4:1/2 D4:1/2 Eb5+Eb4:1/2 G4:1/2 | Ab4+F4:3/4 Eb5:1/4 r:2 |
+      Ab4:3/4 G4:1/4 Ab4:1/2 G4:1/2 F4:1/2 Eb5+Eb4:1/2 | G4:3/4 F4:1/4 G4:1/2 F4:1/2 Eb5+Eb4:1.75 |
+      D5:1/4 Eb5:1/2 D5+B4:1/2 Eb5:1/2 G4:1/2 | F4:3/4 Eb5+Eb4:1/4 D5 r:1 |
+      r:1/2 r:1/4 G4:1/4 G4 Ab4:1/2 Ab4:1 | r:1/2 r:2`,
+    accomp: `
+      C3+C4:1/2 Eb3:1/2 G3:1/2 Eb3:1/2 G3:1/2 Eb3:1/2 | C3:1/2 Eb3:1/2 G3:1/2 Eb3:1/2 r:1 |
+      C3+C4:1/2 Eb3:1/2 G3:1/2 Eb3:1/2 G3:1/2 Eb3:1/2 | C3:1/2 Eb3:1/2 G3:1/2 Eb3:1/2 r:1 |
+      F3+Ab3+C4:3 | C3:1/2 Eb3:1/2 G3:1/2 Eb3:1/2 G3:1/2 Eb3:1/2 |
+      C3+F3+Ab3:3 | C3+Eb3+G3:3 |
+      C3+Eb3+G3:1.5 D3+G3+B3:1/2 r:1 | C3+F3+Ab3:3/4 Eb4:1/4 D4:1/2 C3+Eb3+G3+C4:1.5 |
+      C3+F3+Ab3:3 | C3+Eb3+G3:2.5 D4:1/2 |
+      C3+Eb3+G3+C4:3/4 D4:1/4 Eb4:1/2 D3+G3+B3+D4:1/2 Eb4:1 | C3+F3+Ab3:1 D4:1/2 C3+Eb3+G3+C4:1.5 |
+      C3+C4:1/2 Eb3:1/2 G3:1/2 Eb3+C4:1/2 G3:1/2 Eb3:1 | r:1/2 r:2`,
+  },
+  {
     id: 'shur', cat: 'iranian', inst: 'santur', level: 1, speed: 3,
     title: 'شبانه‌ی شور', by: 'دستگاه شور · ساخته‌ی نوا',
     dastgah: {
