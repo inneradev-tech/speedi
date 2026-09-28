@@ -145,6 +145,7 @@ const Sound = (() => {
     g.gain.value = vel * v.gain;
     src.connect(g); g.connect(dry); g.connect(verbIn);
     src.start(when);
+    src.g = g;
     return src;
   }
 
@@ -171,7 +172,13 @@ const Sound = (() => {
     const t = ctx.currentTime;
     // a touch of human variation keeps repeated notes from sounding mechanical
     const h = 0.92 + Math.random() * 0.1;
-    midis.forEach((m, i) => start(inst, m, vel * h * (i === 0 ? 1 : restVel), t + i * 0.006));
+    return midis.map((m, i) => start(inst, m, vel * h * (i === 0 ? 1 : restVel), t + i * 0.006));
+  }
+  // Lifting the finger off a long tile damps its note, like letting go of a piano key.
+  function release(voices, fade = 0.09) {
+    if (!ctx || !voices) return;
+    const t = ctx.currentTime;
+    for (const v of voices) { v.g.gain.cancelScheduledValues(t); v.g.gain.setTargetAtTime(0, t, fade); try { v.stop(t + fade * 6); } catch (e) {} }
   }
 
   // Accompaniment notes scheduled ahead of time; cancelPending() drops whatever has not started yet.
@@ -218,7 +225,7 @@ const Sound = (() => {
   }
 
   return {
-    init, resume, suspend, preload, play, playAt, cancelPending, fail, chime, toggle,
+    init, resume, suspend, preload, play, release, playAt, cancelPending, fail, chime, toggle,
     get ready() { return !!ctx; },
     get enabled() { return enabled; },
   };

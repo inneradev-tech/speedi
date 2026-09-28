@@ -113,14 +113,16 @@ function buildBg() {
 let mode = 'menu'; // menu | loading | ready | play | fail | over | pause
 let song = null, events = [], firstLapTiles = 0;
 let tiles = [], nextIdx = 0, genRow = 0, genEvent = 0, genLap = 1, lastCol = -1;
-let pos = 0, baseSpeed = 3, speedMul = 1, score = 0, lap = 1, failT = 0, fail = null;
+let pos = 0, baseSpeed = 3, speedMul = 1, score = 0, hits = 0, lap = 1, failT = 0, fail = null;
+let hold = null; // the long tile under a finger: { tl, id, voices, off }
+let floats = [];
 let t = 0, ripples = [], menuTiles = [];
 let best = store.get('nava.best', {});
 let mine = store.get('nava.mine', []);
 
 const allSongs = () => SONGS.concat(mine.map(s => ({ ...s, cat: 'mine' })));
 const ACC_VEL = 0.42;
-const speedNow = () => baseSpeed * speedMul * (1 + Math.min(0.6, score * 0.0035)); // rows per second
+const speedNow = () => baseSpeed * speedMul * (1 + Math.min(0.6, hits * 0.0035)); // rows per second
 
 // Rhythm model: one row = `rowBeat` beats, and tiles are spaced by the real length of each note, so
 // tapping tiles as they arrive reproduces the song's rhythm. Tile height is capped so long notes stay
@@ -275,7 +277,7 @@ async function startSong(s) {
   await Sound.preload(s.inst, midis, p => { ui.loadBar.style.transform = `scaleX(${p})`; });
   show(ui.loading, false);
   tiles = []; nextIdx = 0; genRow = 0; genEvent = 0; genLap = 1; lastCol = -1;
-  pos = 0; score = 0; lap = 1; speedMul = 1; fail = null; ripples = [];
+  pos = 0; score = 0; hits = 0; hold = null; floats = []; lap = 1; speedMul = 1; fail = null; ripples = [];
   baseSpeed = (s.speed || 3) * (H > W ? 1 : 0.95);
   genTiles(12);
   firstLapTiles = events.filter(e => !e.rest).length;
@@ -286,6 +288,7 @@ async function startSong(s) {
 
 function toMenu() {
   mode = 'menu';
+  hold = null;
   Sound.cancelPending();
   show(ui.hud, false); show(ui.over, false); show(ui.pause, false); show(ui.loading, false);
   show(ui.menu, true);
@@ -294,7 +297,7 @@ function toMenu() {
   renderList();
 }
 
-function pauseGame() { if (mode !== 'play') return; mode = 'pause'; Sound.cancelPending(); show(ui.pause, true); }
+function pauseGame() { if (mode !== 'play') return; if (hold) endHold(false); mode = 'pause'; Sound.cancelPending(); show(ui.pause, true); }
 function resumeGame() {
   if (mode !== 'pause') return;
   show(ui.pause, false);
@@ -302,7 +305,7 @@ function resumeGame() {
   mode = 'play';
 }
 
-const starsFor = () => Math.min(3, Math.floor((3 * score) / firstLapTiles + 1e-9));
+const starsFor = () => Math.min(3, Math.floor((3 * hits) / firstLapTiles + 1e-9));
 
 function triggerFail(kind, tile, x, y) {
   mode = 'fail'; failT = 0;
@@ -310,6 +313,7 @@ function triggerFail(kind, tile, x, y) {
   // scroll back so the missed tile sits just above the bottom edge
   if (kind === 'miss') fail.toPos = tile.b + START_ROW - 0.3;
   clockOn = false;
+  if (hold) endHold(false);
   Sound.fail();
   if (navigator.vibrate) navigator.vibrate([50, 40, 80]);
 }
@@ -342,7 +346,7 @@ canvas.addEventListener('pointerdown', e => {
   const bottom = tileBottom(tl), top = bottom - tl.h * B.rowH;
   const slop = B.rowH * 0.3;
   if (col === tl.col && y >= top - slop && y <= bottom + slop) {
-    hit(tl, x, y);
+    hit(tl, x, y, e.pointerId);
   } else {
     // ignore taps on tiles already played
     for (const o of tiles) {
@@ -355,25 +359,56 @@ canvas.addEventListener('pointerdown', e => {
   }
 });
 
-function hit(tl, x, y) {
+// Long tiles (longer than one row) must be held: the fill climbs to the finger as the tile slides down,
+// the note sounds for as long as the finger stays, and holding to the top earns a bonus.
+const isLong = tl => tl.h > 1.01;
+function hit(tl, x, y, id) {
+  if (hold) endHold(); // a new tile with another finger ends the previous hold
   tl.tapped = true; tl.tt = 0;
-  score++;
+  score++; hits++;
   if (tl.lap > lap) { lap = tl.lap; speedMul = Math.pow(1.14, lap - 1); Sound.chime(song.inst, [tl.notes[0] + 12]); }
   if (accList.length) syncClock(tileTime(tl));
-  Sound.play(song.inst, tl.notes, 0.95, accList.length ? 0.8 : 0.62);
+  const voices = Sound.play(song.inst, tl.notes, 0.95, accList.length ? 0.8 : 0.62);
+  if (isLong(tl)) {
+    // rows between the tile's bottom and the touch point: the fill starts there, under the finger
+    const off = clamp((tileBottom(tl) - y) / B.rowH, 0, tl.h);
+    hold = { tl, id, voices, off, p0: pos };
+    tl.fill = off; tl.holding = true;
+  }
   ripples.push({ x, y, t: 0, col: tl.col });
   if (mode === 'ready') mode = 'play';
   nextIdx++;
   runClock(0);
 }
 
+function endHold(done) {
+  const { tl, voices } = hold;
+  hold = null;
+  tl.holding = false; tl.tt = 0;
+  if (done) {
+    tl.full = true;
+    const bonus = Math.max(1, Math.round(tl.h - 1));
+    score += bonus;
+    const bx = B.x + (tl.col + 0.5) * B.colW, by = tileBottom(tl) - tl.h * B.rowH;
+    floats.push({ x: bx, y: Math.max(40, by), t: 0, text: '+' + faNum(bonus) });
+    ripples.push({ x: bx, y: Math.max(40, by), t: 0, col: tl.col });
+  } else {
+    Sound.release(voices);
+  }
+}
+const liftHold = e => { if (hold && hold.id === e.pointerId) endHold(false); };
+window.addEventListener('pointerup', liftHold);
+window.addEventListener('pointercancel', liftHold);
+
+window.addEventListener('keyup', e => { if (hold && hold.id === e.code) endHold(false); });
 window.addEventListener('keydown', e => {
   if ((mode === 'play' || mode === 'ready') && ['KeyD', 'KeyF', 'KeyJ', 'KeyK'].includes(e.code)) {
     const col = ['KeyD', 'KeyF', 'KeyJ', 'KeyK'].indexOf(e.code);
     const tl = nextTile();
     if (!tl) return;
     const bottom = tileBottom(tl);
-    if (col === tl.col) hit(tl, B.x + (col + 0.5) * B.colW, bottom - B.rowH * 0.5);
+    if (e.repeat) { e.preventDefault(); return; }
+    if (col === tl.col) hit(tl, B.x + (col + 0.5) * B.colW, bottom - B.rowH * 0.5, e.code);
     else if (mode === 'play') triggerFail('wrong', null, B.x + (col + 0.5) * B.colW, bottom - B.rowH * 0.5);
     e.preventDefault();
   } else if (e.code === 'Escape') {
@@ -501,11 +536,17 @@ function update(dt) {
   t += dt;
   for (const r of ripples) r.t += dt;
   ripples = ripples.filter(r => r.t < 0.5);
-  for (const tl of tiles) if (tl.tapped) tl.tt += dt;
+  for (const tl of tiles) if (tl.tapped && !tl.holding) tl.tt += dt;
+  for (const f of floats) f.t += dt;
+  floats = floats.filter(f => f.t < 0.9);
 
   if (mode === 'play') {
     pos += speedNow() * dt;
     runClock(dt);
+    if (hold) {
+      hold.tl.fill = Math.min(hold.tl.h, hold.off + pos - hold.p0);
+      if (hold.tl.fill >= hold.tl.h - 0.02) endHold(true);
+    }
     genTiles(pos + 10);
     const tl = nextTile();
     // missed: the tile slid half-way off the bottom untapped
@@ -548,7 +589,10 @@ function drawTile(x, y, w, h, tl, alpha) {
   }
   if (tl && tl.h > 1.01) {
     ctx.globalAlpha = alpha * 0.35; ctx.strokeStyle = theme.edge; ctx.lineWidth = 2; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(x + w / 2, y + B.rowH * 0.3); ctx.lineTo(x + w / 2, y + h - B.rowH * 0.7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + w / 2, y + B.rowH * 0.3); ctx.lineTo(x + w / 2, y + h - B.rowH * 0.5 - 12); ctx.stroke();
+    // "hold" marker: a ring where the finger goes down
+    ctx.globalAlpha = alpha * 0.7; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(x + w / 2, y + h - B.rowH * 0.5, Math.min(w * 0.14, 11), 0, TAU); ctx.stroke();
   }
   ctx.globalAlpha = 1;
 }
@@ -584,8 +628,18 @@ function render() {
     const h = tl.h * B.rowH, top = bottom - h;
     if (bottom < 0 || top > H) continue;
     const x = B.x + tl.col * B.colW;
+    if (tl.holding) {
+      drawTile(x, top, B.colW, h, tl, 1);
+      const fh = tl.fill * B.rowH;
+      ctx.globalAlpha = 0.75; ctx.fillStyle = theme.hit;
+      rrect(ctx, x + 3, bottom - fh + 1, B.colW - 6, fh - 4, 8); ctx.fill();
+      ctx.globalAlpha = 0.9 + Math.sin(t * 18) * 0.1; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(x + B.colW / 2, bottom - fh + 8, Math.min(B.colW * 0.12, 9), 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      continue;
+    }
     if (tl.tapped) {
-      const a = Math.max(0, 0.55 - tl.tt * 0.9);
+      const a = Math.max(0, (tl.full ? 0.8 : 0.55) - tl.tt * 0.9);
       ctx.globalAlpha = a; ctx.fillStyle = theme.hit;
       rrect(ctx, x + 2, top + 2, B.colW - 4, h - 4, 8); ctx.fill();
       ctx.globalAlpha = 1;
@@ -624,6 +678,13 @@ function render() {
     ctx.globalAlpha = (1 - k) * 0.6; ctx.strokeStyle = theme.hit; ctx.lineWidth = 3 * (1 - k) + 1;
     ctx.beginPath(); ctx.arc(r.x, r.y, 10 + k * B.colW * 0.6, 0, TAU); ctx.stroke();
   }
+  // hold bonuses
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `900 ${Math.round(Math.min(B.colW * 0.3, 30))}px Vazirmatn, sans-serif`;
+  for (const f of floats) {
+    ctx.globalAlpha = 1 - f.t / 0.9; ctx.fillStyle = theme.edge;
+    ctx.fillText(f.text, f.x, f.y - f.t * 50);
+  }
   ctx.globalAlpha = 1;
 }
 
@@ -632,7 +693,7 @@ let hudScore = -1, hudProg = -1;
 function updateHud() {
   if (mode !== 'play' && mode !== 'ready' && mode !== 'fail') return;
   if (score !== hudScore) { hudScore = score; ui.score.textContent = faNum(score); }
-  const prog = Math.min(1, score / firstLapTiles);
+  const prog = Math.min(1, hits / firstLapTiles);
   if (prog !== hudProg) {
     hudProg = prog;
     ui.progFill.style.transform = `scaleX(${prog})`;
