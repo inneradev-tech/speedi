@@ -114,6 +114,8 @@ let mode = 'menu'; // menu | loading | ready | play | fail | over | pause
 let song = null, events = [], firstLapTiles = 0;
 let tiles = [], nextIdx = 0, genRow = 0, genEvent = 0, genLap = 1, lastCol = -1;
 let pos = 0, baseSpeed = 3, speedMul = 1, score = 0, hits = 0, lap = 1, failT = 0, fail = null;
+let streak = 0, maxStreak = 0, judged = { perfect: 0, great: 0, ok: 0 };
+let flash = 0; // brief glow when the multiplier goes up
 let hold = null; // the long tile under a finger: { tl, id, voices, off }
 let floats = [];
 let t = 0, ripples = [], menuTiles = [];
@@ -192,7 +194,7 @@ const nextTile = () => { while (nextIdx < tiles.length && (tiles[nextIdx].marker
 const $ = id => document.getElementById(id);
 const ui = {
   menu: $('menu'), list: $('songList'), tabs: document.querySelectorAll('.tab'), addBtn: $('btnAdd'),
-  hud: $('hud'), btnBack: $('btnBack'), score: $('score'), progFill: $('progFill'), progStars: document.querySelectorAll('#prog .st'), btnSound: $('btnSound'),
+  hud: $('hud'), btnBack: $('btnBack'), score: $('score'), combo: $('combo'), overStats: $('overStats'), progFill: $('progFill'), progStars: document.querySelectorAll('#prog .st'), btnSound: $('btnSound'),
   pause: $('pause'), btnResume: $('btnResume'), btnQuit: $('btnQuit'),
   over: $('over'), overTitle: $('overTitle'), overScore: $('overScore'), overStars: $('overStars'), overBest: $('overBest'), newBest: $('newBest'),
   btnRetry: $('btnRetry'), btnSongs: $('btnSongs'),
@@ -277,11 +279,12 @@ async function startSong(s) {
   await Sound.preload(s.inst, midis, p => { ui.loadBar.style.transform = `scaleX(${p})`; });
   show(ui.loading, false);
   tiles = []; nextIdx = 0; genRow = 0; genEvent = 0; genLap = 1; lastCol = -1;
-  pos = 0; score = 0; hits = 0; hold = null; floats = []; lap = 1; speedMul = 1; fail = null; ripples = [];
+  pos = 0; score = 0; hits = 0; hold = null; floats = [];
+  streak = 0; maxStreak = 0; judged = { perfect: 0, great: 0, ok: 0 }; flash = 0; lap = 1; speedMul = 1; fail = null; ripples = [];
   baseSpeed = (s.speed || 3) * (H > W ? 1 : 0.95);
   genTiles(12);
   firstLapTiles = events.filter(e => !e.rest).length;
-  hudScore = -1; hudProg = -1;
+  hudScore = -1; hudProg = -1; hudStreak = -1;
   mode = 'ready';
   show(ui.hud, true);
 }
@@ -329,6 +332,8 @@ function finishRun() {
   ui.overScore.textContent = faNum(score);
   ui.overStars.innerHTML = starsHtml(stars) + (lap > 1 ? `<em>دور ${faNum(lap)}</em>` : '');
   ui.overBest.textContent = faNum(best[song.id].score);
+  const acc = hits ? Math.round((100 * (judged.perfect + judged.great * 0.6)) / hits) : 0;
+  ui.overStats.innerHTML = `عالی <b>${faNum(judged.perfect)}</b> · خوب <b>${faNum(judged.great)}</b> · بیشترین کمبو <b>${faNum(maxStreak)}</b><br>دقت ریتم <b>${faNum(acc)}٪</b>`;
   show(ui.newBest, isBest && score > 0);
   show(ui.hud, false); show(ui.over, true);
   ui.btnRetry.disabled = true;
@@ -362,10 +367,31 @@ canvas.addEventListener('pointerdown', e => {
 // Long tiles (longer than one row) must be held: the fill climbs to the finger as the tile slides down,
 // the note sounds for as long as the finger stays, and holding to the top earns a bonus.
 const isLong = tl => tl.h > 1.01;
+
+// Timing: a tile is due when its bottom reaches the line one row above the screen's bottom edge
+// (pos === tile.b), which is exactly when the song's rhythm wants it. On-time taps build the streak.
+const POINTS = { perfect: 3, great: 2, ok: 1 };
+const JUDGE_TEXT = { perfect: 'عالی!', great: 'خوب' };
+const STEPS = [[50, 4], [25, 3], [10, 2]];
+const mult = () => { for (const [n, m] of STEPS) if (streak >= n) return m; return 1; };
+function judge(tl) {
+  const err = Math.abs(pos - tl.b) / speedNow(); // seconds early or late
+  return err <= 0.1 ? 'perfect' : err <= 0.2 ? 'great' : 'ok';
+}
 function hit(tl, x, y, id) {
   if (hold) endHold(); // a new tile with another finger ends the previous hold
   tl.tapped = true; tl.tt = 0;
-  score++; hits++;
+  hits++;
+  const j = mode === 'ready' ? 'perfect' : judge(tl);
+  judged[j]++;
+  if (j === 'ok') streak = 0;
+  else {
+    const before = mult();
+    streak++; maxStreak = Math.max(maxStreak, streak);
+    if (mult() > before) { flash = 1; Sound.chime(song.inst, [tl.notes[0] + 12, tl.notes[0] + 19], 0.07); }
+  }
+  score += POINTS[j] * mult();
+  if (j !== 'ok' && mode !== 'ready') floats.push({ x, y: y - B.rowH * 0.35, t: 0, text: JUDGE_TEXT[j], j });
   if (tl.lap > lap) { lap = tl.lap; speedMul = Math.pow(1.14, lap - 1); Sound.chime(song.inst, [tl.notes[0] + 12]); }
   if (accList.length) syncClock(tileTime(tl));
   const voices = Sound.play(song.inst, tl.notes, 0.95, accList.length ? 0.8 : 0.62);
@@ -387,7 +413,7 @@ function endHold(done) {
   tl.holding = false; tl.tt = 0;
   if (done) {
     tl.full = true;
-    const bonus = Math.max(1, Math.round(tl.h - 1));
+    const bonus = Math.max(1, Math.round(tl.h - 1)) * mult();
     score += bonus;
     const bx = B.x + (tl.col + 0.5) * B.colW, by = tileBottom(tl) - tl.h * B.rowH;
     floats.push({ x: bx, y: Math.max(40, by), t: 0, text: '+' + faNum(bonus) });
@@ -538,6 +564,7 @@ function update(dt) {
   ripples = ripples.filter(r => r.t < 0.5);
   for (const tl of tiles) if (tl.tapped && !tl.holding) tl.tt += dt;
   for (const f of floats) f.t += dt;
+  flash = Math.max(0, flash - dt * 1.8);
   floats = floats.filter(f => f.t < 0.9);
 
   if (mode === 'play') {
@@ -614,6 +641,21 @@ function render() {
   }
   if (mode === 'loading') return;
 
+  // the lanes warm up as the streak grows, and flash when the multiplier steps up
+  const heat = Math.min(1, streak / 50);
+  if (heat > 0 || flash > 0) {
+    const g = ctx.createLinearGradient(0, H, 0, H * 0.35);
+    g.addColorStop(0, theme.hit); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = heat * 0.16 + flash * 0.35; ctx.fillStyle = g;
+    ctx.fillRect(B.x, H * 0.35, B.w, H * 0.65);
+    ctx.globalAlpha = 1;
+  }
+  // beat line: a tile landing its bottom edge here is exactly on the beat
+  const ly = H - B.rowH * START_ROW;
+  ctx.globalAlpha = 0.22 + heat * 0.25 + flash * 0.4; ctx.strokeStyle = theme.edge; ctx.lineWidth = 2;
+  ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.moveTo(B.x, ly); ctx.lineTo(B.x + B.w, ly); ctx.stroke(); ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
   for (const tl of tiles) {
     const bottom = tileBottom(tl);
     if (tl.marker) {
@@ -682,17 +724,28 @@ function render() {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `900 ${Math.round(Math.min(B.colW * 0.3, 30))}px Vazirmatn, sans-serif`;
   for (const f of floats) {
-    ctx.globalAlpha = 1 - f.t / 0.9; ctx.fillStyle = theme.edge;
-    ctx.fillText(f.text, f.x, f.y - f.t * 50);
+    ctx.globalAlpha = 1 - f.t / 0.9;
+    ctx.fillStyle = f.j === 'perfect' ? '#ffe7a8' : f.j === 'great' ? '#bff5f1' : theme.edge;
+    const sc = f.j ? 0.75 + Math.min(1, f.t * 8) * 0.25 : 1;
+    ctx.save(); ctx.translate(f.x, f.y - f.t * 50); ctx.scale(sc, sc); ctx.fillText(f.text, 0, 0); ctx.restore();
   }
   ctx.globalAlpha = 1;
 }
 
 // ---------------------------------------------------------------- HUD
-let hudScore = -1, hudProg = -1;
+let hudScore = -1, hudProg = -1, hudStreak = -1;
 function updateHud() {
   if (mode !== 'play' && mode !== 'ready' && mode !== 'fail') return;
   if (score !== hudScore) { hudScore = score; ui.score.textContent = faNum(score); }
+  if (streak !== hudStreak) {
+    const m = mult();
+    ui.combo.innerHTML = streak >= 3 ? `کمبو <b>${faNum(streak)}</b>${m > 1 ? `<i>×${faNum(m)}</i>` : ''}` : '';
+    ui.combo.classList.toggle('on', streak >= 3);
+    if (streak > hudStreak && streak >= 3 && (streak % 5 === 0 || STEPS.some(([n]) => n === streak))) {
+      ui.combo.classList.remove('pop'); void ui.combo.offsetWidth; ui.combo.classList.add('pop');
+    }
+    hudStreak = streak;
+  }
   const prog = Math.min(1, hits / firstLapTiles);
   if (prog !== hudProg) {
     hudProg = prog;
