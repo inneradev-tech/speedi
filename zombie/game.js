@@ -151,134 +151,268 @@ function drawGun(p, ang, flash) {
   g.restore();
 }
 
-const ZSKIN = {
-  walker: [['#8fb56a', '#6f9150', '#5a7a40'], ['#9dba7c', '#7b9a5d', '#627f48'], ['#a3b08a', '#838f6b', '#6a7555']],
-  runner: [['#a4b4b3', '#7f908f', '#667473'], ['#b0a9b8', '#8a8394', '#6f6879']],
-  brute: [['#7d9a5a', '#627d44', '#4d6535']],
-};
-const ZSHIRT = ['#5d6b8a', '#7a4f4f', '#6b6b4f', '#4f6b63', '#6e5a7d', '#8a7a5a'];
+// ---- zombies: bold-outline cartoon style (big head, bulging mismatched eyes, hunched)
+const OL = '#1b1f15';
+const LW = 1.7;
+let EYES_ONLY = false;
 
-function zombieHead(z, hx, hy, r, sk, pass) {
-  if (pass === 'eyes') {
-    g.fillStyle = z.type === 'walker' ? 'rgba(255,225,90,1)' : 'rgba(255,70,50,1)';
-    const s = z.type === 'brute' ? 1.6 : 1.9;
-    g.beginPath(); g.arc(hx + r * 0.55, hy - r * 0.05, s, 0, TAU); g.fill();
-    g.beginPath(); g.arc(hx + r * 0.1, hy - r * 0.08, s * 0.8, 0, TAU); g.fill();
-    return;
-  }
-  circ(hx, hy, r, sk[0]);
-  ell(hx - r * 0.3, hy + r * 0.35, r * 0.7, r * 0.45, sk[1]);
-  // hair tufts / scalp
-  if (z.type === 'brute') {
-    limb(hx - r * 0.6, hy - r * 0.5, hx + r * 0.2, hy - r * 0.9, 1.2, '#3a2a22');
-    for (let i = 0; i < 4; i++) limb(hx - r * 0.5 + i * 3, hy - r * 0.8 + i * 0.3, hx - r * 0.5 + i * 3 + 0.5, hy - r * 0.5 + i * 0.3, 1, '#3a2a22');
-  } else {
-    g.fillStyle = col(z.hair);
-    g.beginPath();
-    g.arc(hx - 1, hy - 2, r * 0.98, Math.PI * 1.05, Math.PI * 1.75);
-    g.lineTo(hx + r * 0.2, hy - r * 0.45);
-    g.lineTo(hx - r * 0.2, hy - r * 0.2);
-    g.lineTo(hx - r * 0.6, hy - r * 0.35);
-    g.closePath(); g.fill();
-  }
-  // eye sockets
-  ell(hx + r * 0.55, hy - r * 0.05, r * 0.26, r * 0.3, '#2a1a14');
-  ell(hx + r * 0.1, hy - r * 0.08, r * 0.2, r * 0.26, '#2a1a14');
-  // mouth with teeth
-  g.fillStyle = col('#2b0d0d');
+const ZSKIN = {
+  walker: [['#98a585', '#76836a'], ['#a2ab86', '#80896a'], ['#8fa283', '#6f8065']],
+  runner: [['#a6ab9c', '#83887a'], ['#9fa9a6', '#7c8683']],
+  brute: [['#8d9b70', '#6c7953']],
+};
+const ZOUTFIT = {
+  walker: ['#5f6a78', '#6b6f52', '#5c4f6b', '#4e5f5a', '#6d5a48'],
+  runner: ['#b04a3a', '#3f7a5c', '#c79a2e', '#4d5fa0'],
+  brute: ['#46618f', '#5c6b3f'],
+};
+const ZTIE = ['#2f6f8f', '#6f8f3f', '#b08a2c', '#7a4a8a', '#3a3a3a'];
+
+function fs(c, lw = LW) {
+  if (EYES_ONLY) return;
+  g.fillStyle = col(c); g.fill();
+  g.lineWidth = lw; g.strokeStyle = OL; g.lineJoin = 'round'; g.stroke();
+}
+// closed shape through the given points, rounded with quadratic curves
+function smooth(pts) {
+  const n = pts.length / 2;
+  const mx = i => (pts[(i % n) * 2] + pts[((i + 1) % n) * 2]) / 2;
+  const my = i => (pts[(i % n) * 2 + 1] + pts[((i + 1) % n) * 2 + 1]) / 2;
   g.beginPath();
-  g.moveTo(hx + r * 0.05, hy + r * 0.45);
-  g.lineTo(hx + r * 0.85, hy + r * 0.35);
-  g.lineTo(hx + r * 0.75, hy + r * 0.75 + z.jaw * r * 0.2);
-  g.lineTo(hx + r * 0.15, hy + r * 0.7 + z.jaw * r * 0.2);
-  g.closePath(); g.fill();
-  g.fillStyle = col('#e8e0c0');
-  for (let i = 0; i < 3; i++) g.fillRect(hx + r * (0.2 + i * 0.2), hy + r * 0.42, r * 0.1, r * 0.12);
-  // wound
-  if (z.scar) { ell(hx - r * 0.35, hy - r * 0.2, r * 0.18, r * 0.12, '#7a1d1d'); }
+  g.moveTo(mx(n - 1), my(n - 1));
+  for (let i = 0; i < n; i++) g.quadraticCurveTo(pts[i * 2], pts[i * 2 + 1], mx(i), my(i));
+  g.closePath();
+}
+function limbO(x1, y1, x2, y2, w, c) {
+  if (EYES_ONLY) return;
+  g.lineCap = 'round';
+  g.strokeStyle = OL; g.lineWidth = w + LW * 2;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  g.strokeStyle = col(c); g.lineWidth = w;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+}
+function ellO(x, y, rx, ry, c, lw) { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); fs(c, lw); }
+
+function zLeg(ang, pants, torn, skin) {
+  g.save(); g.rotate(ang);
+  if (torn) {
+    limbO(0, 8, 0.5, 17, 3.2, skin[0]);
+    smooth([-4.8, -2, 4.8, -2, 4.8, 8, 2.8, 10.8, 1, 8.6, -1.4, 11.4, -3.2, 9, -4.8, 10]);
+  } else {
+    smooth([-4.8, -2, 4.8, -2, 5.3, 13.5, 3.4, 16.8, 1.4, 14.6, -1, 17.4, -3.2, 15, -5, 16]);
+  }
+  fs(pants);
+  smooth([-4.5, 15.4, 2.5, 14.8, 8.5, 15.6, 11.5, 18.2, 10.6, 21.2, -4.2, 21.2, -5.6, 18.6]);
+  fs('#6a4a2f');
+  if (!EYES_ONLY) { g.strokeStyle = '#3f2a18'; g.lineWidth = 1; g.beginPath(); g.moveTo(-4, 19.6); g.lineTo(10.4, 19.6); g.stroke(); }
+  g.restore();
+}
+
+function zHand(skin, s = 1) {
+  g.save(); g.scale(s, s);
+  for (const [x, a] of [[-1.2, 0.25], [1.2, 0.05], [3.4, -0.2]]) limbO(x, 3, x + Math.sin(a) * 3, 7.2, 1.9, skin[0]);
+  smooth([-3.2, -1, 3.4, -1.4, 5, 2.2, 3, 4.6, -2.4, 4.4, -4, 2]);
+  fs(skin[0]);
+  g.restore();
+}
+
+function zArm(ang, sleeve, skin, cuffCol, handScale, shortSleeve) {
+  g.save(); g.rotate(ang);
+  limbO(0.5, shortSleeve ? 5 : 10, 1.2, 17, 3.4, skin[0]);
+  if (shortSleeve) { smooth([-3.6, -2.4, 3.8, -2.4, 4.2, 5, 1, 7, -3, 5.4]); fs(sleeve); }
+  else {
+    smooth([-3.8, -2.4, 3.8, -2.4, 4.4, 10.4, -3.4, 11.2]); fs(sleeve);
+    g.beginPath(); g.moveTo(-3.3, 8.6); g.lineTo(4.2, 8); g.lineTo(4.4, 10.4); g.lineTo(-3.4, 11.2); g.closePath(); fs(cuffCol, 1.2);
+  }
+  g.translate(1.3, 18);
+  zHand(skin, handScale);
+  g.restore();
+}
+
+function zEye(x, y, r, lx, ly, big) {
+  if (EYES_ONLY) {
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = 0.5;
+    g.drawImage(GLOW_EYE_Y, x - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 0.9;
+    g.fillStyle = '#f4f1dc'; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    g.lineWidth = LW; g.strokeStyle = OL; g.stroke();
+  } else {
+    g.beginPath(); g.arc(x, y, r, 0, TAU); fs('#f4f1dc');
+    // lower-lid shading gives the "bulging" look
+    g.save(); g.beginPath(); g.arc(x, y, r - 0.8, 0, TAU); g.clip();
+    g.fillStyle = 'rgba(120,120,90,.25)'; g.beginPath(); g.ellipse(x - r * 0.2, y + r * 0.55, r, r * 0.55, 0, 0, TAU); g.fill();
+    g.restore();
+  }
+  const pr = big ? r * 0.2 : r * 0.26;
+  g.fillStyle = '#121212';
+  g.beginPath(); g.arc(x + lx * r * 0.45, y + ly * r * 0.45, pr, 0, TAU); g.fill();
+  g.globalAlpha = 1;
+}
+
+function zHead(z, R, skin, style) {
+  const seed = z.seed;
+  // lumpy skull outline
+  const pts = [];
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * TAU;
+    const r2 = R * (1 + 0.045 * Math.sin(i * 2.3 + seed * 5));
+    pts.push(Math.cos(a) * r2 * 1.04, Math.sin(a) * r2 * (style === 'brute' ? 0.9 : 0.96));
+  }
+  ellO(-R * 0.72, R * 0.08, R * 0.2, R * 0.28, skin[1], 1.4);
+  smooth(pts); fs(skin[0]);
+  if (!EYES_ONLY) {
+    g.save(); smooth(pts); g.clip();
+    g.fillStyle = col(skin[1]);
+    g.beginPath(); g.ellipse(-R * 0.45, R * 0.55, R * 0.95, R * 0.7, -0.3, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.12)';
+    g.beginPath(); g.ellipse(R * 0.1, -R * 0.55, R * 0.55, R * 0.25, -0.2, 0, TAU); g.fill();
+    g.restore();
+    smooth(pts); g.lineWidth = LW; g.strokeStyle = OL; g.stroke();
+    // hair strands / stitches
+    g.strokeStyle = OL; g.lineCap = 'round';
+    if (style === 'brute') {
+      g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(-R * 0.7, -R * 0.35); g.quadraticCurveTo(-R * 0.1, -R * 0.95, R * 0.4, -R * 0.75); g.stroke();
+      for (let i = 0; i < 5; i++) {
+        const t2 = i / 4, x = lerp(-R * 0.6, R * 0.3, t2), y = -R * (0.45 + Math.sin(t2 * Math.PI) * 0.42);
+        g.beginPath(); g.moveTo(x - 1.2, y - 1.6); g.lineTo(x + 1.2, y + 1.6); g.stroke();
+      }
+    } else {
+      g.lineWidth = 0.9;
+      for (let i = 0; i < z.hairN; i++) {
+        const a = -2.4 + i * 0.32 + Math.sin(seed + i) * 0.1;
+        const bx = Math.cos(a) * R * 0.98, by = Math.sin(a) * R * 0.94;
+        g.beginPath(); g.moveTo(bx, by);
+        g.quadraticCurveTo(bx + Math.cos(a) * 4, by + Math.sin(a) * 5 - 2, bx + Math.cos(a) * 6 + Math.sin(seed * 3 + i) * 2, by + Math.sin(a) * 7);
+        g.stroke();
+      }
+    }
+    // brow ridge & wrinkle
+    g.lineWidth = 1.3;
+    g.beginPath(); g.moveTo(R * 0.05, -R * 0.52); g.quadraticCurveTo(R * 0.45, -R * 0.68, R * 0.95, -R * 0.45); g.stroke();
+    g.lineWidth = 0.8;
+    g.beginPath(); g.moveTo(-R * 0.1, -R * 0.72); g.quadraticCurveTo(R * 0.2, -R * 0.8, R * 0.45, -R * 0.74); g.stroke();
+
+    // mouth
+    const jaw = z.jaw * (style === 'runner' ? 1.4 : 1);
+    const mx0 = R * 0.28, mx1 = R * 1.08, my0 = R * 0.34;
+    g.beginPath();
+    g.moveTo(mx0, my0);
+    g.quadraticCurveTo((mx0 + mx1) / 2, my0 - R * 0.08, mx1, my0 - R * 0.04);
+    g.lineTo(mx1 - R * 0.06, my0 + R * (0.34 + jaw * 0.2));
+    g.quadraticCurveTo((mx0 + mx1) / 2, my0 + R * (0.46 + jaw * 0.25), mx0 + R * 0.08, my0 + R * (0.28 + jaw * 0.15));
+    g.closePath();
+    fs('#6e1c1f', 1.4);
+    g.fillStyle = '#4a0f12';
+    g.beginPath(); g.ellipse((mx0 + mx1) / 2 + R * 0.05, my0 + R * (0.28 + jaw * 0.14), R * 0.22, R * 0.08, 0, 0, TAU); g.fill();
+    // a few uneven teeth with gaps
+    const teeth = style === 'brute' ? [[0.42, 0.2, 0.18], [0.78, 0.22, 0.2]] : [[0.4, 0.17, 0.2], [0.63, 0.15, 0.14], [0.86, 0.14, 0.22]];
+    for (const [tx, tw, th] of teeth) { g.beginPath(); g.rect(R * tx, my0 - R * 0.04, R * tw, R * th); fs('#f1ead0', 1); }
+    if (style === 'brute') {
+      for (const tx of [0.5, 0.82]) { g.beginPath(); g.rect(R * tx, my0 + R * (0.24 + jaw * 0.18), R * 0.14, -R * 0.18); fs('#f1ead0', 1); }
+    }
+    // nostrils
+    g.fillStyle = OL;
+    g.beginPath(); g.ellipse(R * 1.0, R * 0.12, R * 0.05, R * 0.08, 0.3, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(R * 0.84, R * 0.14, R * 0.045, R * 0.07, 0.3, 0, TAU); g.fill();
+  }
+
+  // eyes (also drawn in the eyes-only pass, so they read in the dark)
+  const eb = style === 'brute' ? 0.24 : style === 'runner' ? 0.36 : 0.3;
+  const ef = style === 'brute' ? 0.32 : style === 'runner' ? 0.42 : 0.44;
+  const [small, big] = z.eyeSwap ? [ef * 0.8, eb * 1.2] : [eb, ef];
+  zEye(R * 0.22, -R * 0.2, R * small, z.lx, z.ly, false);
+  zEye(R * 0.78, -R * 0.12, R * big, z.lx * 0.6, z.ly, true);
 }
 
 function drawZombie(z, pass) {
+  EYES_ONLY = pass === 'eyes';
   const w = z.walk, m = z.moveAmt, sk = z.skin;
-  const bob = Math.abs(Math.sin(w)) * 2 * m;
-  if (pass !== 'eyes') shadow(z.type === 'brute' ? 19 : 14, z.type === 'brute' ? 6 : 5);
+  const type = z.type;
+  if (!EYES_ONLY) shadow(type === 'brute' ? 21 : 14, type === 'brute' ? 6.5 : 5);
   g.save();
+  if (type === 'brute') g.scale(1.42, 1.42);
 
-  if (z.type === 'brute') {
-    if (pass !== 'eyes') {
-      leg(-5, -20, 17, Math.sin(w + Math.PI) * 0.35 * m, 10, '#2e3f5c', '#1a1a1a');
-      leg(5, -20, 17, Math.sin(w) * 0.35 * m, 10, '#364a6b', '#1f1f1f');
-    }
-    g.translate(0, -bob);
-    g.rotate(0.08);
-    if (pass === 'eyes') { zombieHead(z, 5, -54, 11.5, sk, pass); g.restore(); return; }
-    const reach = Math.sin(w * 0.5) * 2;
-    limb(0, -40, 25, -31 + reach, 9, sk[2]);
-    circ(26, -31 + reach, 6, sk[2]);
-    rr(-18, -48, 34, 32, 13, sk[0]);
-    rr(-18, -48, 10, 32, 9, sk[1]);
-    rr(-14, -34, 28, 20, 8, '#3e5680');
-    rr(-14, -34, 8, 20, 6, '#324668');
-    limb(-8, -34, -8, -47, 3, '#3e5680');
-    limb(8, -34, 8, -47, 3, '#3e5680');
-    circ(-8, -34, 1.8, '#c9b37a'); circ(8, -34, 1.8, '#c9b37a');
-    ell(4, -40, 3, 2, '#7a1d1d');
-    zombieHead(z, 5, -54, 11.5, sk, pass);
-    limb(2, -54 + 6, 10, -54 + 4, 1, '#3a2a22');
-    limb(5, -38, 28, -27 - reach, 9.5, sk[0]);
-    circ(29, -27 - reach, 6.5, sk[1]);
-    g.restore();
-    return;
-  }
+  const runner = type === 'runner';
+  const bob = Math.abs(Math.sin(w)) * (runner ? 2.6 : 1.8) * m;
+  const swing = runner ? 0.75 : type === 'brute' ? 0.32 : 0.42;
+  const lean = runner ? 0.42 : type === 'brute' ? 0.12 : 0.22;
+  const hipY = -21;
 
-  const runner = z.type === 'runner';
-  const lean = runner ? 0.32 : 0.14;
-  const legSwing = runner ? 0.8 : 0.4;
-  if (pass !== 'eyes') {
-    leg(-3, -18, 16, Math.sin(w + Math.PI) * legSwing * m * (runner ? 1 : 0.6), 6, z.pants, '#1b1a18');
-    leg(3, -18, 16, Math.sin(w) * legSwing * m, 6, shadeHex(z.pants, 12), '#23211e');
-  }
-  g.translate(0, -bob);
-  g.translate(0, -18); g.rotate(lean); g.translate(0, 18);
-  const hx = 5, hy = -49 + (runner ? 3 : 0);
-  if (pass === 'eyes') { zombieHead(z, hx, hy, 12, sk, pass); g.restore(); return; }
-
-  const sway = Math.sin(w * 0.5 + z.seed) * 3;
-  // back arm
-  if (runner) {
-    const sw = Math.sin(w) * 10 * m;
-    limb(0, -34, 8 - sw * 0.6, -22, 5, sk[2]);
-    circ(8 - sw * 0.6, -22, 3.2, sk[2]);
-  } else {
-    limb(0, -35, 22, -33 + sway, 5.5, sk[2]);
-    circ(23, -33 + sway, 3.4, sk[2]);
-  }
-  // torso
-  rr(-10, -38, 20, 23, 7, z.shirt);
-  rr(-10, -38, 6, 23, 5, shadeHex(z.shirt, -22));
-  poly([-4, -20, 0, -26, 3, -21, 6, -24, 10, -18, 10, -15, -10, -15, -10, -19], sk[1]);
-  ell(3, -30, 3.5, 2.6, '#6e1a1a');
-  ell(-2, -26, 1.8, 1.4, '#6e1a1a');
-  if (runner) { rr(-10, -38, 20, 5, 2, sk[0]); }
-  // head
-  zombieHead(z, hx, hy, 12, sk, pass);
-  // front arm
-  if (runner) {
-    const sw = Math.sin(w + Math.PI) * 10 * m;
-    limb(2, -34, 12 - sw * 0.6, -24, 5.5, sk[0]);
-    circ(12 - sw * 0.6, -24, 3.4, sk[1]);
-  } else {
-    limb(3, -33, 24, -29 - sway, 6, sk[0]);
-    circ(25, -29 - sway, 3.6, sk[1]);
-    limb(25, -29 - sway, 29, -30 - sway, 1.5, sk[1]);
-  }
+  // legs
+  g.save(); g.translate(-2.2, hipY - bob * 0.3);
+  zLeg(Math.sin(w + Math.PI) * swing * m * (runner ? 1 : 0.7), shadeHex(z.pants, -18), !runner, sk);
   g.restore();
+  g.save(); g.translate(2.2, hipY - bob * 0.3);
+  zLeg(Math.sin(w) * swing * m, z.pants, runner, sk);
+  g.restore();
+
+  g.save(); g.translate(0, hipY - bob); g.rotate(lean + Math.sin(w * 2) * 0.03 * m);
+
+  // back arm
+  const sway = Math.sin(w * 0.5 + z.seed) * 0.12;
+  const backA = runner ? -0.3 + Math.sin(w) * 0.9 * m : -0.55 + sway;
+  g.save(); g.translate(type === 'walker' ? 0 : 4, -17); zArm(backA, shadeHex(z.outfit, -22), [sk[1], sk[1]], shadeHex(z.outfit, -30), type === 'brute' ? 1.5 : 1, runner); g.restore();
+
+  // torso
+  if (type === 'walker') {
+    const jacket = [-8.5, 2, -9.5, -9, -7.6, -19, 1.5, -22.5, 10, -20.5, 12.2, -10, 10.8, 2, 1, 3.6];
+    smooth(jacket); fs(z.outfit);
+    if (!EYES_ONLY) {
+      g.save(); smooth(jacket); g.clip();
+      g.fillStyle = col(shadeHex(z.outfit, -24)); g.fillRect(-12, -24, 8, 30);
+      g.restore();
+      smooth(jacket); g.lineWidth = LW; g.strokeStyle = OL; g.stroke();
+    }
+    g.beginPath(); g.moveTo(-0.6, -22.2); g.lineTo(7.4, -21.4); g.lineTo(3.6, -7); g.closePath(); fs('#d8d8cc', 1.3);
+    smooth([1.9, -21, 4.7, -21, 5.6, -8.4, 3.8, -5, 1.8, -8.6]); fs(z.tie, 1.3);
+    if (!EYES_ONLY) {
+      g.strokeStyle = shadeHex(z.tie, 60); g.lineWidth = 0.9;
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(2, -17 + i * 4); g.lineTo(5.4, -19 + i * 4); g.stroke(); }
+    }
+    g.beginPath(); g.rect(2.1, -21.4, 2.8, 2.6); fs(shadeHex(z.tie, -20), 1.1);
+    if (!EYES_ONLY) { g.strokeStyle = OL; g.lineWidth = 1.1; g.beginPath(); g.moveTo(-1.4, -22); g.lineTo(2.6, -6); g.lineTo(5, -1.5); g.stroke(); }
+    g.beginPath(); g.moveTo(-5.6, -9); g.lineTo(-2.6, -12); g.lineTo(-1.4, -8.8); g.lineTo(0.6, -11); g.lineTo(0.4, -6.4); g.lineTo(-4.6, -5.6); g.closePath(); fs(sk[0], 1.1);
+  } else if (runner) {
+    smooth([-7, 2, -8, -10, -6, -19.5, 2, -22, 9, -19.5, 10, -9, 8.4, 1.5, 0, 3]); fs(z.outfit);
+    g.beginPath(); g.moveTo(-5, 3); g.lineTo(-3.4, -1); g.lineTo(-1.2, 2.4); g.lineTo(1.4, -1.4); g.lineTo(3.6, 2.6); g.lineTo(6, -0.4); g.lineTo(8, 2); fs(shadeHex(z.outfit, -30), 1.1);
+    ellO(4, -9, 3, 2.2, '#7a2222', 1);
+    if (!EYES_ONLY) { g.fillStyle = '#f1ead0'; g.font = 'bold 7px sans-serif'; g.textAlign = 'center'; g.fillText(String(z.num), 2.5, -11); }
+  } else {
+    smooth([-12, 3, -13.5, -10, -10, -21, 2, -24.5, 12, -21.5, 15, -9, 13, 3, 0, 5]); fs('#c9b89a');
+    smooth([-10, 3.4, -10.5, -12, 11.5, -12, 12.2, 3.4, 0, 5]); fs(z.outfit);
+    limbO(-6, -12, -5, -22, 2.4, z.outfit);
+    limbO(8, -12, 7, -22, 2.4, z.outfit);
+    ellO(-6, -12.4, 1.6, 1.6, '#d9c27a', 1); ellO(8, -12.4, 1.6, 1.6, '#d9c27a', 1);
+    g.beginPath(); g.rect(-3, -7, 7, 5); fs(shadeHex(z.outfit, -15), 1.1);
+    ellO(4, -17, 2.6, 1.8, '#7a2222', 1);
+  }
+
+  // neck + head, pushed forward of the body
+  const R = runner ? 12.8 : type === 'brute' ? 11.5 : 14;
+  const hx = runner ? 9 : type === 'brute' ? 7 : 8.5, hy = runner ? -30 : type === 'brute' ? -31 : -35;
+  limbO(4, -20, hx - 3, hy + R * 0.6, runner ? 4 : 5.5, sk[1]);
+  g.save();
+  g.translate(hx, hy + Math.sin(w * 0.5 + z.seed) * 0.6);
+  g.rotate(-lean * 0.6 + Math.sin(w * 0.5 + z.seed * 2) * 0.05);
+  zHead(z, R, sk, type);
+  g.restore();
+
+  // front arm hangs limp in front of the body
+  const frontA = runner ? -0.3 + Math.sin(w + Math.PI) * 0.9 * m : -0.45 - sway;
+  g.save(); g.translate(type === 'walker' ? 10 : 6, -17); zArm(frontA, z.outfit, sk, type === 'walker' ? '#d8d8cc' : shadeHex(z.outfit, -20), type === 'brute' ? 1.6 : 1.05, runner); g.restore();
+
+  g.restore();
+  g.restore();
+  EYES_ONLY = false;
 }
 
 function shadeHex(hex, amt) {
   const n = parseInt(hex.slice(1), 16);
   const f = v => clamp(v + amt, 0, 255);
-  return `rgb(${f(n >> 16 & 255)},${f(n >> 8 & 255)},${f(n & 255)})`;
+  return '#' + ((1 << 24) | (f(n >> 16 & 255) << 16) | (f(n >> 8 & 255) << 8) | f(n & 255)).toString(16).slice(1);
 }
 
 // ---------------------------------------------------------------- scenery
@@ -407,7 +541,6 @@ const GLOW_WARM = glowSprite(64, 'rgba(255,190,110,.55)');
 const GLOW_ORANGE = glowSprite(64, 'rgba(255,140,40,.7)');
 const GLOW_MUZZLE = glowSprite(64, 'rgba(255,210,120,.8)');
 const GLOW_EYE_Y = glowSprite(16, 'rgba(255,220,90,.9)');
-const GLOW_EYE_R = glowSprite(16, 'rgba(255,60,40,.9)');
 const GLOW_RED = glowSprite(64, 'rgba(255,60,60,.5)');
 
 // ---------------------------------------------------------------- world decor (procedural chunks)
@@ -483,8 +616,9 @@ function makeZombie(type, x, y) {
   return {
     type, x, y, r: base[2], hp: Math.ceil(base[0] * hpMul), maxHp: 0,
     speed: base[1] * (1 + Math.min(0.35, (wave - 1) * 0.03)) * rand(0.9, 1.1),
-    dmg: base[3], skin: pick(skins), shirt: pick(ZSHIRT), pants: pick(['#3d3a33', '#33384a', '#40352c', '#2e3a34']),
-    hair: pick(['#2e2620', '#3d3226', '#1f1c1a', '#4a3a2c']), scar: Math.random() < 0.5,
+    dmg: base[3], skin: pick(skins), outfit: pick(ZOUTFIT[type]), tie: pick(ZTIE),
+    pants: pick(['#3d5a8a', '#46507a', '#4d4a3e', '#3a5560']), hairN: 3 + ((Math.random() * 4) | 0),
+    eyeSwap: Math.random() < 0.3, lx: rand(-0.6, 0.9), ly: rand(-0.5, 0.6), num: 1 + ((Math.random() * 98) | 0),
     walk: Math.random() * TAU, moveAmt: 1, face: 1, flash: 0, kx: 0, ky: 0, seed: Math.random() * 10,
     jaw: 0, dead: 0, dieDir: 1, tx: x, ty: y,
   };
@@ -1018,7 +1152,8 @@ function render() {
     ctx.drawImage(GLOW_MUZZLE, fx - 50, fy - 50, 100, 100);
   }
   for (const k of pickups) { ctx.globalAlpha = 0.6 + Math.sin(k.t * 4) * 0.2; ctx.drawImage(GLOW_RED, k.x - 24, k.y - 34, 48, 48); }
-  // zombie eyes glow in the dark
+  // zombie eyes stay visible in the dark
+  ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
   g = ctx;
   for (const z of zombies) {
@@ -1026,13 +1161,7 @@ function render() {
     g.save(); g.translate(z.x, z.y); if (z.face < 0) g.scale(-1, 1);
     drawZombie(z, 'eyes');
     g.restore();
-    const e = z.type === 'walker' ? GLOW_EYE_Y : GLOW_EYE_R;
-    const hy = z.type === 'brute' ? -54 : z.type === 'runner' ? -44 : -49;
-    ctx.globalAlpha = 0.7;
-    ctx.drawImage(e, z.x + z.face * 8 - 8, z.y + hy - 8 - 2, 16, 16);
-    ctx.globalAlpha = 1;
   }
-  ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
 
   // player health ring under the feet
